@@ -1,0 +1,61 @@
+{
+    "components": {
+        "securitySchemes": {
+            "BearerAuth": {
+                "in": "header",
+                "name": "Authorization",
+                "type": "apiKey"
+            }
+        }
+    },
+    "info": {
+        "contact": {
+            "email": "juergen.enge@unibas.ch",
+            "name": "Jürgen Enge",
+            "url": "https://ub.unibas.ch"
+        },
+        "description": "for testing if server is running",
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "termsOfService": "http://swagger.io/terms/",
+        "title": "WSBroker API",
+        "version": "1.0"
+    },
+    "externalDocs": {
+        "description": "",
+        "url": ""
+    },
+    "paths": {
+        "/ping": {
+            "get": {
+                "description": "for testing if server is running",
+                "operationId": "get-ping",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "does pong",
+                "tags": [
+                    "wsbroker"
+                ]
+            }
+        }
+    },
+    "openapi": "3.1.0",
+    "servers": [
+        {
+            "description": "WSBroker API base path",
+            "url": "/api/v1"
+        }
+    ]
+}

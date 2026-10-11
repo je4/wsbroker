@@ -1,0 +1,9 @@
+localaddr = "localhost:8765"
+externaladdr = "https://localhost:8765"
+bearer = "test"
+
+[resttls]
+type = "DEV"
+
+[log]
+level = "debug"
