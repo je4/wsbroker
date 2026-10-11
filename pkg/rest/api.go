@@ -159,7 +159,10 @@ func (ctrl *controller) Start(wg *sync.WaitGroup) {
 }
 
 func (ctrl *controller) GracefulStop() {
-	ctrl.server.Shutdown(context.Background())
+	if err := ctrl.server.Shutdown(context.Background()); err != nil {
+		ctrl.logger.Error().Err(err).Msg("error shutting down server")
+		return
+	}
 }
 
 // ping godoc

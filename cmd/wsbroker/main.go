@@ -40,7 +40,12 @@ func main() {
 		if err != nil {
 			log.Fatalf("cannot create client loader: %v", err)
 		}
-		defer loggerLoader.Close()
+		defer func(loggerLoader io.Closer) {
+			err := loggerLoader.Close()
+			if err != nil {
+				log.Printf("error closing logger: %v", err)
+			}
+		}(loggerLoader)
 	}
 
 	_logger, _logstash, _logfile, err := ublogger.CreateUbMultiLoggerTLS(conf.Log.Level, conf.Log.File,
@@ -53,10 +58,20 @@ func main() {
 		log.Fatalf("cannot create logger: %v", err)
 	}
 	if _logstash != nil {
-		defer _logstash.Close()
+		defer func(_logstash *ublogger.NewStash) {
+			err := _logstash.Close()
+			if err != nil {
+				_logger.Error().Err(err).Msg("error closing logstash")
+			}
+		}(_logstash)
 	}
 	if _logfile != nil {
-		defer _logfile.Close()
+		defer func(_logfile *os.File) {
+			err := _logfile.Close()
+			if err != nil {
+				_logger.Error().Err(err).Msg("error closing logfile")
+			}
+		}(_logfile)
 	}
 
 	l2 := _logger.With().Timestamp().Str("host", hostname).Str("addr", conf.LocalAddr).Logger()
@@ -69,7 +84,12 @@ func main() {
 		if err != nil {
 			logger.Fatal().Err(err).Msg("cannot create server loader")
 		}
-		defer restLoader.Close()
+		defer func(restLoader io.Closer) {
+			err := restLoader.Close()
+			if err != nil {
+				logger.Error().Err(err).Msg("error closing rest loader")
+			}
+		}(restLoader)
 	}
 
 	ctrl, err := rest.NewController(conf.LocalAddr, conf.ExternalAddr, restTLSConfig, conf.Bearer.String(), logger)
