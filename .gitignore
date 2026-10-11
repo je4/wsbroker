@@ -32,3 +32,5 @@ go.work.sum
 .idea/
 .junie/
 # .vscode/
+/certs/
+/config/wsbroker_local.toml
