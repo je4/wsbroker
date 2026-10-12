@@ -11,7 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/je4/wsbroker/pkg/event"
+	"github.com/je4/wsbrokerclient/pkg/event"
 	"github.com/rs/zerolog"
 )
 

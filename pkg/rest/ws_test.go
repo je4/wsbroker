@@ -13,7 +13,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/je4/wsbroker/pkg/event"
+	"github.com/je4/wsbrokerclient/pkg/event"
 	"github.com/rs/zerolog"
 )
 
@@ -21,13 +21,7 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 	logger := zerolog.Nop()
 	bearer := "test-secret"
 
-	ctrl, err := NewController(
-		":0",
-		"http://localhost:8765",
-		nil,
-		bearer,
-		&logger,
-	)
+	ctrl, err := NewController(":0", "http://localhost:8765", nil, bearer, true, &logger)
 	if err != nil {
 		t.Fatalf("failed to create controller: %v", err)
 	}
@@ -229,13 +223,7 @@ func TestWebSocketAuthFailure(t *testing.T) {
 	logger := zerolog.Nop()
 	bearer := "secure-token"
 
-	ctrl, err := NewController(
-		":0",
-		"http://localhost:8765",
-		nil,
-		bearer,
-		&logger,
-	)
+	ctrl, err := NewController(":0", "http://localhost:8765", nil, bearer, false, &logger)
 	if err != nil {
 		t.Fatalf("failed to create controller: %v", err)
 	}

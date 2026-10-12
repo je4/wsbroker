@@ -15,13 +15,7 @@ func TestSwaggerAndPing(t *testing.T) {
 	logger := zerolog.Nop()
 	bearer := "secret-token"
 
-	ctrl, err := NewController(
-		":0",
-		"http://localhost:8080/wsbroker",
-		nil,
-		bearer,
-		&logger,
-	)
+	ctrl, err := NewController(":0", "http://localhost:8080/wsbroker", nil, bearer, false, &logger)
 	if err != nil {
 		t.Fatalf("failed to create controller: %v", err)
 	}
@@ -84,13 +78,7 @@ func TestSwaggerAndPing(t *testing.T) {
 
 	// Test 4: Default base path without subpath (/api/v1)
 	{
-		ctrlDefault, err := NewController(
-			":0",
-			"https://localhost:8765",
-			nil,
-			bearer,
-			&logger,
-		)
+		ctrlDefault, err := NewController(":0", "https://localhost:8765", nil, bearer, false, &logger)
 		if err != nil {
 			t.Fatalf("failed to create default controller: %v", err)
 		}

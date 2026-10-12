@@ -12,7 +12,7 @@ import (
 
 	"emperror.dev/errors"
 	"github.com/je4/utils/v2/pkg/zLogger"
-	"github.com/je4/wsbroker/pkg/event"
+	"github.com/je4/wsbrokerclient/pkg/event"
 )
 
 // NewConnectionManager initializes and returns a new ConnectionManager.

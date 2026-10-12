@@ -13,7 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/je4/wsbroker/pkg/broker"
-	"github.com/je4/wsbroker/pkg/event"
+	"github.com/je4/wsbrokerclient/pkg/event"
 )
 
 //go:embed templates/dashboard.gohtml

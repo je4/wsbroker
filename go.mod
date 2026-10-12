@@ -1,6 +1,6 @@
 module github.com/je4/wsbroker
 
-go 1.27
+go 1.27.2
 
 require (
 	emperror.dev/errors v0.8.1
@@ -9,6 +9,7 @@ require (
 	github.com/gin-contrib/cors v1.7.9
 	github.com/gin-gonic/gin v1.12.0
 	github.com/je4/utils/v2 v2.0.71
+	github.com/je4/wsbrokerclient v0.0.0-20261012162658-2e9766080755
 	github.com/rs/zerolog v1.35.1
 	github.com/swaggo/swag/v2 v2.0.0-rc6
 	gitlab.switch.ch/ub-unibas/go-ublogger/v2 v2.0.1
@@ -60,7 +61,7 @@ require (
 	github.com/ugorji/go/codec v1.3.2 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.9.2 // indirect
 	go.step.sm/crypto v0.91.0 // indirect
-	go.ub.unibas.ch/cloud/minivaultclient v1.0.0 // indirect
+	go.ub.unibas.ch/cloud/minivaultclient v1.0.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/arch v0.32.0 // indirect

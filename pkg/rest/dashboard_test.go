@@ -11,13 +11,13 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/je4/wsbroker/pkg/event"
+	"github.com/je4/wsbrokerclient/pkg/event"
 	"github.com/rs/zerolog"
 )
 
 func TestDashboardPageAndPartials(t *testing.T) {
 	logger := zerolog.Nop()
-	ctrl, err := NewController("localhost:0", "http://localhost:8080", nil, "", &logger)
+	ctrl, err := NewController("localhost:0", "http://localhost:8080", nil, "", true, &logger)
 	if err != nil {
 		t.Fatalf("failed to create controller: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestDashboardPageAndPartials(t *testing.T) {
 
 func TestDashboardConnectionManagementAndPublish(t *testing.T) {
 	logger := zerolog.Nop()
-	ctrl, err := NewController("localhost:0", "http://localhost:8080", nil, "", &logger)
+	ctrl, err := NewController("localhost:0", "http://localhost:8080", nil, "", true, &logger)
 	if err != nil {
 		t.Fatalf("failed to create controller: %v", err)
 	}
@@ -214,4 +214,42 @@ func TestDashboardConnectionManagementAndPublish(t *testing.T) {
 		t.Fatalf("expected 200 from REST disconnect, got %d", respRestDel.StatusCode)
 	}
 	respRestDel.Body.Close()
+}
+
+func TestDashboardDisabled(t *testing.T) {
+	logger := zerolog.Nop()
+	ctrl, err := NewController("localhost:0", "http://localhost:8080", nil, "", false, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+
+	server := httptest.NewServer(ctrl.router)
+	defer server.Close()
+
+	// Endpoints that must not exist when dashboard is false
+	endpoints := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/dashboard"},
+		{http.MethodGet, "/dashboard/stats"},
+		{http.MethodGet, "/dashboard/connections"},
+		{http.MethodGet, "/dashboard/channels"},
+		{http.MethodPost, "/dashboard/publish"},
+		{http.MethodGet, "/api/v1/channels"},
+		{http.MethodGet, "/api/v1/clients"},
+		{http.MethodDelete, "/api/v1/client/test"},
+	}
+
+	for _, ep := range endpoints {
+		req, _ := http.NewRequest(ep.method, server.URL+ep.path, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s failed: %v", ep.method, ep.path, err)
+		}
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected 404 for %s %s when dashboard is disabled, got %d", ep.method, ep.path, resp.StatusCode)
+		}
+		resp.Body.Close()
+	}
 }

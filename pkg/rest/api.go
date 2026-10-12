@@ -24,8 +24,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/je4/utils/v2/pkg/zLogger"
 	"github.com/je4/wsbroker/pkg/broker"
-	"github.com/je4/wsbroker/pkg/event"
 	"github.com/je4/wsbroker/pkg/rest/docs"
+	"github.com/je4/wsbrokerclient/pkg/event"
 	"go.ub.unibas.ch/cloud/swaggerui"
 )
 
@@ -52,11 +52,7 @@ const BASEPATH = "/api/v1"
 //	@name						Authorization
 
 // NewController creates and configures a new REST and WebSocket controller instance.
-func NewController(addr, extAddr string,
-	tlsConfig *tls.Config,
-	bearer string,
-	logger zLogger.ZLogger,
-) (*controller, error) {
+func NewController(addr, extAddr string, tlsConfig *tls.Config, bearer string, dashboard bool, logger zLogger.ZLogger) (*controller, error) {
 	u, err := url.Parse(extAddr)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid external address '%s'", extAddr)
@@ -84,7 +80,7 @@ func NewController(addr, extAddr string,
 		numWorkers: runtime.NumCPU(),
 		debug:      false,
 	}
-	if err := c.Init(tlsConfig); err != nil {
+	if err := c.Init(tlsConfig, dashboard); err != nil {
 		return nil, errors.Wrap(err, "cannot initialize rest controller")
 	}
 	return c, nil
@@ -121,7 +117,7 @@ func (ctrl *controller) GetBroker() *broker.ConnectionManager {
 }
 
 // Init configures middleware, REST endpoints, WebSocket routes, Swagger UI, and the HTTP server.
-func (ctrl *controller) Init(tlsConfig *tls.Config) error {
+func (ctrl *controller) Init(tlsConfig *tls.Config, dashboard bool) error {
 	ctrl.router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"*"},
@@ -169,8 +165,8 @@ func (ctrl *controller) Init(tlsConfig *tls.Config) error {
 			}
 			authHeader := c.Request.Header.Get("Authorization")
 			token := ""
-			if strings.HasPrefix(authHeader, "Bearer ") {
-				token = strings.TrimPrefix(authHeader, "Bearer ")
+			if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
+				token = after
 			} else if qToken := c.Query("token"); qToken != "" {
 				token = qToken
 			} else if qBearer := c.Query("bearer"); qBearer != "" {
@@ -190,21 +186,24 @@ func (ctrl *controller) Init(tlsConfig *tls.Config) error {
 	// REST Broker Endpoints
 	v1.POST("/publish", ctrl.publish)
 	v1.POST("/channel/:channel/publish", ctrl.publishChannel)
-	v1.GET("/channels", ctrl.getChannels)
-	v1.GET("/channel/:channel/clients", ctrl.getChannelClients)
-	v1.GET("/clients", ctrl.getClients)
-	v1.DELETE("/client/:name", ctrl.disconnectClient)
-	v1.DELETE("/clients/:name", ctrl.disconnectClient)
 
-	// Dashboard Endpoints
-	ctrl.router.GET("/dashboard", ctrl.dashboardHandler)
-	ctrl.router.GET("/dashboard/", ctrl.dashboardHandler)
-	ctrl.router.GET("/dashboard/stats", ctrl.dashboardStatsHandler)
-	ctrl.router.GET("/dashboard/connections", ctrl.dashboardConnectionsHandler)
-	ctrl.router.DELETE("/dashboard/connections/:name", ctrl.dashboardDisconnectHandler)
-	ctrl.router.POST("/dashboard/connections/:name/disconnect", ctrl.dashboardDisconnectHandler)
-	ctrl.router.GET("/dashboard/channels", ctrl.dashboardChannelsHandler)
-	ctrl.router.POST("/dashboard/publish", ctrl.dashboardPublishHandler)
+	if dashboard {
+		v1.GET("/channels", ctrl.getChannels)
+		v1.GET("/channel/:channel/clients", ctrl.getChannelClients)
+		v1.GET("/clients", ctrl.getClients)
+		v1.DELETE("/client/:name", ctrl.disconnectClient)
+		v1.DELETE("/clients/:name", ctrl.disconnectClient)
+
+		// Dashboard Endpoints
+		ctrl.router.GET("/dashboard", ctrl.dashboardHandler)
+		ctrl.router.GET("/dashboard/", ctrl.dashboardHandler)
+		ctrl.router.GET("/dashboard/stats", ctrl.dashboardStatsHandler)
+		ctrl.router.GET("/dashboard/connections", ctrl.dashboardConnectionsHandler)
+		ctrl.router.DELETE("/dashboard/connections/:name", ctrl.dashboardDisconnectHandler)
+		ctrl.router.POST("/dashboard/connections/:name/disconnect", ctrl.dashboardDisconnectHandler)
+		ctrl.router.GET("/dashboard/channels", ctrl.dashboardChannelsHandler)
+		ctrl.router.POST("/dashboard/publish", ctrl.dashboardPublishHandler)
+	}
 
 	// WebSocket Endpoints under root and /api/v1
 	ctrl.router.GET("/ws/:name", ctrl.wsHandler)

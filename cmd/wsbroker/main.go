@@ -19,6 +19,7 @@ import (
 )
 
 var configfile = flag.String("config", "", "location of toml configuration file")
+var dashboard = flag.Bool("dashboard", false, "start dashboard")
 
 // main initializes configuration, logging, TLS certificates, and starts the WSBroker controller.
 func main() {
@@ -94,7 +95,7 @@ func main() {
 		}(restLoader)
 	}
 
-	ctrl, err := rest.NewController(conf.LocalAddr, conf.ExternalAddr, restTLSConfig, conf.Bearer.String(), logger)
+	ctrl, err := rest.NewController(conf.LocalAddr, conf.ExternalAddr, restTLSConfig, conf.Bearer.String(), *dashboard, logger)
 	if err != nil {
 		logger.Fatal().Msgf("cannot create controller: %v", err)
 	}
