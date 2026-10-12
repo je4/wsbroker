@@ -7,6 +7,70 @@ import "github.com/swaggo/swag/v2"
 const docTemplateWSBroker = `{
     "schemes": {{ marshal .Schemes }},
     "components": {
+        "schemas": {
+            "pkg_rest.HTTPResultMessage": {
+                "properties": {
+                    "code": {
+                        "example": 400,
+                        "type": "integer"
+                    },
+                    "message": {
+                        "example": "status bad request",
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            },
+            "pkg_rest.PublishRequest": {
+                "properties": {
+                    "data": {
+                        "example": "{\"text\":\"hello world\"}",
+                        "type": "string"
+                    },
+                    "message": {
+                        "example": "hello world",
+                        "type": "string"
+                    },
+                    "source": {
+                        "example": "publisher-1",
+                        "type": "string"
+                    },
+                    "target": {
+                        "example": "alerts",
+                        "type": "string"
+                    },
+                    "token": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "example": "message",
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            },
+            "pkg_rest.PublishResponse": {
+                "properties": {
+                    "sent": {
+                        "example": true,
+                        "type": "boolean"
+                    },
+                    "subscribers": {
+                        "example": 3,
+                        "type": "integer"
+                    },
+                    "target": {
+                        "example": "alerts",
+                        "type": "string"
+                    },
+                    "type": {
+                        "example": "message",
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            }
+        },
         "securitySchemes": {
             "BearerAuth": {
                 "in": "header",
@@ -35,6 +99,208 @@ const docTemplateWSBroker = `{
         "url": ""
     },
     "paths": {
+        "/channel/{channel}/clients": {
+            "get": {
+                "description": "returns list of all clients subscribed to a specific channel",
+                "operationId": "get-channel-clients",
+                "parameters": [
+                    {
+                        "description": "Channel name",
+                        "in": "path",
+                        "name": "channel",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "summary": "list clients in channel",
+                "tags": [
+                    "wsbroker"
+                ]
+            }
+        },
+        "/channel/{channel}/publish": {
+            "post": {
+                "description": "publishes a message or event to all subscribers of a channel",
+                "operationId": "post-channel-publish",
+                "parameters": [
+                    {
+                        "description": "Channel name",
+                        "in": "path",
+                        "name": "channel",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/pkg_rest.PublishRequest",
+                                "summary": "body",
+                                "description": "Publish payload"
+                            }
+                        }
+                    },
+                    "description": "Publish payload",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/pkg_rest.PublishResponse"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "summary": "publish message to channel",
+                "tags": [
+                    "wsbroker"
+                ]
+            }
+        },
+        "/channels": {
+            "get": {
+                "description": "returns list of all active channels and their subscriber count",
+                "operationId": "get-channels",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "integer"
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "summary": "list active channels",
+                "tags": [
+                    "wsbroker"
+                ]
+            }
+        },
+        "/clients": {
+            "get": {
+                "description": "returns list of all connected clients",
+                "operationId": "get-clients",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "summary": "list connected clients",
+                "tags": [
+                    "wsbroker"
+                ]
+            }
+        },
         "/ping": {
             "get": {
                 "description": "for testing if server is running",
@@ -56,9 +322,86 @@ const docTemplateWSBroker = `{
                     "wsbroker"
                 ]
             }
+        },
+        "/publish": {
+            "post": {
+                "description": "publishes a message or event to a channel or client target",
+                "operationId": "post-publish",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/pkg_rest.PublishRequest",
+                                "summary": "body",
+                                "description": "Publish payload"
+                            }
+                        }
+                    },
+                    "description": "Publish payload",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/pkg_rest.PublishResponse"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Unauthorized"
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "summary": "publish message to target",
+                "tags": [
+                    "wsbroker"
+                ]
+            }
         }
     },
     "openapi": "3.1.0",
+    "security": [
+        {
+            "BearerAuth": []
+        },
+        {
+            "BearerAuth": []
+        },
+        {
+            "BearerAuth": []
+        },
+        {
+            "BearerAuth": []
+        },
+        {
+            "BearerAuth": []
+        }
+    ],
     "servers": [
         {
             "description": "WSBroker API base path",
@@ -71,7 +414,7 @@ const docTemplateWSBroker = `{
 var SwaggerInfoWSBroker = &swag.Spec{
 	Version:          "1.0",
 	Title:            "WSBroker API",
-	Description:      "for testing if server is running",
+	Description:      "returns list of all connected clients",
 	InfoInstanceName: "WSBroker",
 	SwaggerTemplate:  docTemplateWSBroker,
 	LeftDelim:        "{{",

@@ -5,6 +5,8 @@ go 1.27
 require (
 	emperror.dev/errors v0.8.1
 	github.com/BurntSushi/toml v1.6.0
+	github.com/coder/websocket v1.8.15
+	github.com/gin-contrib/cors v1.7.9
 	github.com/gin-gonic/gin v1.12.0
 	github.com/je4/utils/v2 v2.0.71
 	github.com/rs/zerolog v1.35.1

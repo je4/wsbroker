@@ -1,6 +1,8 @@
 localaddr = "localhost:8765"
 externaladdr = "https://localhost:8765"
 bearer = "test"
+num_workers = 10
+debug = false
 
 [resttls]
 type = "DEV"

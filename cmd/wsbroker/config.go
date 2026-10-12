@@ -1,3 +1,4 @@
+// Package main is the entry point and server binary for the WSBroker application.
 package main
 
 import (
@@ -13,16 +14,20 @@ import (
 	"go.ub.unibas.ch/cloud/certloader/v2/pkg/loader"
 )
 
+// WSBrokerConfig holds the complete configuration options for running the WSBroker service.
 type WSBrokerConfig struct {
 	LocalAddr    string             `toml:"localaddr"`
 	ExternalAddr string             `toml:"externaladdr"`
 	Bearer       config.EnvString   `toml:"bearer"`
+	NumWorkers   int                `toml:"num_workers"`
+	Debug        bool               `toml:"debug"`
 	RESTTLS      loader.Config      `toml:"resttls"`
 	Log          stashconfig.Config `toml:"log"`
 }
 
 var configdirs = []string{"~/.wsbroker.toml", "/etc/wsbroker.toml", "/opt/wsbroker/wsbroker.toml"}
 
+// expandHomedir resolves home directory prefix "~/" in file paths.
 func expandHomedir(fp string) string {
 	if strings.HasPrefix(fp, "~/") {
 		dirname, _ := os.UserHomeDir()
@@ -31,6 +36,8 @@ func expandHomedir(fp string) string {
 	return fp
 }
 
+// LoadWSBrokerConfig loads configuration defaults and decodes the TOML file at the specified path
+// or from standard search locations.
 func LoadWSBrokerConfig(fp string, conf *WSBrokerConfig) error {
 	if _, err := toml.Decode(localconfig.DefaultConfig, conf); err != nil {
 		return errors.Wrap(err, "error decoding default config")

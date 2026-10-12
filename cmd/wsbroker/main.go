@@ -1,3 +1,4 @@
+// Package main is the entry point and server binary for the WSBroker application.
 package main
 
 import (
@@ -19,6 +20,7 @@ import (
 
 var configfile = flag.String("config", "", "location of toml configuration file")
 
+// main initializes configuration, logging, TLS certificates, and starts the WSBroker controller.
 func main() {
 	flag.Parse()
 
@@ -96,6 +98,8 @@ func main() {
 	if err != nil {
 		logger.Fatal().Msgf("cannot create controller: %v", err)
 	}
+	ctrl.SetNumWorkers(conf.NumWorkers)
+	ctrl.SetDebug(conf.Debug)
 	var wg = &sync.WaitGroup{}
 	ctrl.Start(wg)
 

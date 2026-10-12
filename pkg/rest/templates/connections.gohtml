@@ -1,0 +1,59 @@
+{{ if . }}
+<div class="overflow-x-auto">
+    <table class="w-full text-left text-xs text-slate-300">
+        <thead class="bg-slate-950/60 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <tr>
+                <th class="py-3 px-4">Client Name</th>
+                <th class="py-3 px-4">Security</th>
+                <th class="py-3 px-4">Channels</th>
+                <th class="py-3 px-4 text-right">Action</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-800/60 font-sans">
+            {{ range . }}
+            <tr class="hover:bg-slate-800/40 transition">
+                <td class="py-3 px-4 font-mono font-medium text-white flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-teal-400"></span>
+                    {{ .Name }}
+                </td>
+                <td class="py-3 px-4">
+                    {{ if .Secure }}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">WSS (TLS)</span>
+                    {{ else }}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">WS</span>
+                    {{ end }}
+                </td>
+                <td class="py-3 px-4">
+                    {{ if .Channels }}
+                    <div class="flex flex-wrap gap-1">
+                        {{ range .Channels }}
+                        <span class="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-teal-300 border border-slate-700 font-mono">#{{ . }}</span>
+                        {{ end }}
+                    </div>
+                    {{ else }}
+                    <span class="text-slate-500 italic">No channels</span>
+                    {{ end }}
+                </td>
+                <td class="py-3 px-4 text-right">
+                    <button 
+                        hx-delete="/dashboard/connections/{{ .Name }}"
+                        hx-target="#connections-container"
+                        hx-swap="innerHTML"
+                        class="px-2.5 py-1 text-xs font-medium text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 active:bg-rose-500/30 rounded border border-rose-500/30 transition">
+                        Disconnect
+                    </button>
+                </td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</div>
+{{ else }}
+<div class="py-10 text-center text-slate-500 space-y-2">
+    <svg class="w-10 h-10 mx-auto text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.828m2.829 2.828L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.828m-4.243 4.243a9 9 0 01-12.728 0m0 0l2.828-2.829m-2.828 2.829L3 21m2.828-12.728a5 5 0 017.072 0l-2.828 2.828" />
+    </svg>
+    <p class="text-sm font-medium text-slate-400">No active connections</p>
+    <p class="text-xs">Connect clients via <code class="font-mono text-teal-400 bg-slate-950 px-1.5 py-0.5 rounded">/ws/:name</code> or <code class="font-mono text-teal-400 bg-slate-950 px-1.5 py-0.5 rounded">/ws/channel/:channel</code>.</p>
+</div>
+{{ end }}
