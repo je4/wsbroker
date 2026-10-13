@@ -95,10 +95,20 @@ func main() {
 		}(restLoader)
 	}
 
-	ctrl, err := rest.NewController(conf.LocalAddr, conf.ExternalAddr, restTLSConfig, conf.Bearer.String(), *dashboard, logger)
+	dashboardEnabled := *dashboard || conf.Dashboard.Enabled
+	if dashboardEnabled {
+		if conf.Dashboard.Username.String() == "" || conf.Dashboard.Password.String() == "" {
+			if !conf.Dashboard.AllowBearer || conf.Bearer.String() == "" {
+				logger.Warn().Msg("dashboard is enabled without authentication credentials configured (basic auth credentials or bearer fallback required for secure operation)")
+			}
+		}
+	}
+
+	ctrl, err := rest.NewController(conf.LocalAddr, conf.ExternalAddr, restTLSConfig, conf.Bearer.String(), dashboardEnabled, logger)
 	if err != nil {
 		logger.Fatal().Msgf("cannot create controller: %v", err)
 	}
+	ctrl.SetDashboardAuth(conf.Dashboard.Username.String(), conf.Dashboard.Password.String(), conf.Dashboard.AllowBearer)
 	ctrl.SetNumWorkers(conf.NumWorkers)
 	ctrl.SetDebug(conf.Debug)
 	var wg = &sync.WaitGroup{}

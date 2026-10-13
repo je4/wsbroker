@@ -172,3 +172,174 @@ func TestConnectionManagerGroupsAndBroadcasting(t *testing.T) {
 		t.Errorf("expected 1 sports member after removal, got %v", cm.GetChannelMembers("sports"))
 	}
 }
+
+func TestParseConnectionMode(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected ConnectionMode
+		wantErr  bool
+	}{
+		{"rw", ModeRW, false},
+		{"RW", ModeRW, false},
+		{"readwrite", ModeRW, false},
+		{"ro", ModeRO, false},
+		{"RO", ModeRO, false},
+		{"readonly", ModeRO, false},
+		{"wo", ModeWO, false},
+		{"WO", ModeWO, false},
+		{"w", ModeWO, false},
+		{"W", ModeWO, false},
+		{"writeonly", ModeWO, false},
+		{"invalid", "", true},
+		{"", "", true},
+	}
+
+	for _, tt := range tests {
+		mode, err := ParseConnectionMode(tt.input)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("ParseConnectionMode(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			continue
+		}
+		if mode != tt.expected {
+			t.Errorf("ParseConnectionMode(%q) = %v, want %v", tt.input, mode, tt.expected)
+		}
+	}
+}
+
+func TestConnectionModePermissions(t *testing.T) {
+	if !ModeRW.CanRead() || !ModeRW.CanWrite() {
+		t.Errorf("ModeRW should allow both read and write")
+	}
+	if !ModeRO.CanRead() || ModeRO.CanWrite() {
+		t.Errorf("ModeRO should allow read only")
+	}
+	if ModeWO.CanRead() || !ModeWO.CanWrite() {
+		t.Errorf("ModeWO should allow write only")
+	}
+}
+
+func TestConnectionManagerWriteOnlySuppression(t *testing.T) {
+	logger := zerolog.Nop()
+	cm := NewConnectionManager(false, &logger)
+	cm.Start(4)
+	defer cm.Close()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		clientName := r.URL.Query().Get("name")
+		modeStr := r.URL.Query().Get("mode")
+		mode, _ := ParseConnectionMode(modeStr)
+		ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+			InsecureSkipVerify: true,
+			OriginPatterns:     []string{"*"},
+		})
+		if err != nil {
+			t.Errorf("accept failed: %v", err)
+			return
+		}
+		conn := NewConnectionWithMode(ws, clientName, false, mode)
+		if err := cm.AddWSConn(conn); err != nil {
+			t.Errorf("addWSConn failed: %v", err)
+			return
+		}
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cRO, _, err := websocket.Dial(ctx, wsURL+"?name=reader&mode=ro", nil)
+	if err != nil {
+		t.Fatalf("reader dial failed: %v", err)
+	}
+	defer cRO.Close(websocket.StatusNormalClosure, "")
+
+	cWO, _, err := websocket.Dial(ctx, wsURL+"?name=writer&mode=wo", nil)
+	if err != nil {
+		t.Fatalf("writer dial failed: %v", err)
+	}
+	defer cWO.Close(websocket.StatusNormalClosure, "")
+
+	cRW, _, err := websocket.Dial(ctx, wsURL+"?name=duplex&mode=rw", nil)
+	if err != nil {
+		t.Fatalf("duplex dial failed: %v", err)
+	}
+	defer cRW.Close(websocket.StatusNormalClosure, "")
+
+	var receivedRO = make(chan *event.Event, 10)
+	var receivedWO = make(chan *event.Event, 10)
+	var receivedRW = make(chan *event.Event, 10)
+
+	startReader := func(c *websocket.Conn, ch chan *event.Event) {
+		go func() {
+			for {
+				var evt event.Event
+				if err := wsjson.Read(ctx, c, &evt); err != nil {
+					break
+				}
+				ch <- &evt
+			}
+		}()
+	}
+
+	startReader(cRO, receivedRO)
+	startReader(cWO, receivedWO)
+	startReader(cRW, receivedRW)
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Add all three to channel "updates"
+	cm.AddToGroup("reader", "updates")
+	cm.AddToGroup("writer", "updates")
+	cm.AddToGroup("duplex", "updates")
+
+	// Send message to "updates" channel
+	channelEvt, _ := event.NewMessageEvent("source", "updates", "broadcast message")
+	if err := cm.Send(channelEvt); err != nil {
+		t.Fatalf("failed to send channel event: %v", err)
+	}
+
+	// Verify reader receives message
+	select {
+	case evt := <-receivedRO:
+		d, _ := evt.GetData()
+		if d != "broadcast message" {
+			t.Errorf("reader received wrong data: %v", d)
+		}
+	case <-time.After(1 * time.Second):
+		t.Errorf("reader timed out waiting for channel message")
+	}
+
+	// Verify duplex receives message
+	select {
+	case evt := <-receivedRW:
+		d, _ := evt.GetData()
+		if d != "broadcast message" {
+			t.Errorf("duplex received wrong data: %v", d)
+		}
+	case <-time.After(1 * time.Second):
+		t.Errorf("duplex timed out waiting for channel message")
+	}
+
+	// Verify writer (wo) does NOT receive broadcast message
+	select {
+	case evt := <-receivedWO:
+		t.Errorf("writer should NOT receive broadcast message, got: %+v", evt)
+	case <-time.After(150 * time.Millisecond):
+		// Expected
+	}
+
+	// Direct message to writer (wo) should also be suppressed
+	directEvt, _ := event.NewMessageEvent("source", "writer", "direct to writer")
+	if err := cm.Send(directEvt); err != nil {
+		t.Fatalf("failed to send direct event: %v", err)
+	}
+
+	select {
+	case evt := <-receivedWO:
+		t.Errorf("writer should NOT receive direct message, got: %+v", evt)
+	case <-time.After(150 * time.Millisecond):
+		// Expected
+	}
+}

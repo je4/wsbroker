@@ -1,8 +1,14 @@
 localaddr = "localhost:8765"
 externaladdr = "https://localhost:8765"
-bearer = "test"
+bearer = "%%BEARER%%"
 num_workers = 10
 debug = false
+
+[dashboard]
+enabled = false
+username = "%%DASHBOARD_USER%%"
+password = "%%DASHBOARD_PWD%%"
+allow_bearer = true
 
 [resttls]
 type = "DEV"

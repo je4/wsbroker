@@ -5,6 +5,7 @@ package rest
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -88,15 +89,25 @@ func NewController(addr, extAddr string, tlsConfig *tls.Config, bearer string, d
 
 // controller manages the HTTP router, server lifecycle, and broker integration.
 type controller struct {
-	server     http.Server
-	router     *gin.Engine
-	addr       string
-	subpath    string
-	logger     zLogger.ZLogger
-	bearer     string
-	broker     *broker.ConnectionManager
-	numWorkers int
-	debug      bool
+	server               http.Server
+	router               *gin.Engine
+	addr                 string
+	subpath              string
+	logger               zLogger.ZLogger
+	bearer               string
+	dashboardUser        string
+	dashboardPass        string
+	allowDashboardBearer bool
+	broker               *broker.ConnectionManager
+	numWorkers           int
+	debug                bool
+}
+
+// SetDashboardAuth configures the HTTP Basic Auth credentials and optional bearer token fallback for dashboard access.
+func (ctrl *controller) SetDashboardAuth(username, password string, allowBearer bool) {
+	ctrl.dashboardUser = username
+	ctrl.dashboardPass = password
+	ctrl.allowDashboardBearer = allowBearer
 }
 
 // SetNumWorkers configures the number of background worker goroutines for event dispatching.
@@ -172,7 +183,7 @@ func (ctrl *controller) Init(tlsConfig *tls.Config, dashboard bool) error {
 			} else if qBearer := c.Query("bearer"); qBearer != "" {
 				token = qBearer
 			}
-			if token != ctrl.bearer {
+			if subtle.ConstantTimeCompare([]byte(token), []byte(ctrl.bearer)) != 1 {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
 					Code:    http.StatusUnauthorized,
 					Message: "invalid bearer token",
@@ -195,21 +206,22 @@ func (ctrl *controller) Init(tlsConfig *tls.Config, dashboard bool) error {
 		v1.DELETE("/clients/:name", ctrl.disconnectClient)
 
 		// Dashboard Endpoints
-		ctrl.router.GET("/dashboard", ctrl.dashboardHandler)
-		ctrl.router.GET("/dashboard/", ctrl.dashboardHandler)
-		ctrl.router.GET("/dashboard/stats", ctrl.dashboardStatsHandler)
-		ctrl.router.GET("/dashboard/connections", ctrl.dashboardConnectionsHandler)
-		ctrl.router.DELETE("/dashboard/connections/:name", ctrl.dashboardDisconnectHandler)
-		ctrl.router.POST("/dashboard/connections/:name/disconnect", ctrl.dashboardDisconnectHandler)
-		ctrl.router.GET("/dashboard/channels", ctrl.dashboardChannelsHandler)
-		ctrl.router.POST("/dashboard/publish", ctrl.dashboardPublishHandler)
+		dashGroup := ctrl.router.Group("/dashboard", ctrl.dashboardSecurityMiddleware(), ctrl.dashboardAuthMiddleware())
+		dashGroup.GET("", ctrl.dashboardHandler)
+		dashGroup.GET("/", ctrl.dashboardHandler)
+		dashGroup.GET("/stats", ctrl.dashboardStatsHandler)
+		dashGroup.GET("/connections", ctrl.dashboardConnectionsHandler)
+		dashGroup.DELETE("/connections/:name", ctrl.dashboardDisconnectHandler)
+		dashGroup.POST("/connections/:name/disconnect", ctrl.dashboardDisconnectHandler)
+		dashGroup.GET("/channels", ctrl.dashboardChannelsHandler)
+		dashGroup.POST("/publish", ctrl.dashboardPublishHandler)
 	}
 
 	// WebSocket Endpoints under root and /api/v1
-	ctrl.router.GET("/ws/:name", ctrl.wsHandler)
-	ctrl.router.GET("/ws/channel/:channel", ctrl.wsChannelHandler)
-	v1.GET("/ws/:name", ctrl.wsHandler)
-	v1.GET("/ws/channel/:channel", ctrl.wsChannelHandler)
+	ctrl.router.GET("/ws/:name/:mode", ctrl.wsHandler)
+	ctrl.router.GET("/ws/channel/:channel/:mode", ctrl.wsChannelHandler)
+	//v1.GET("/ws/:name", ctrl.wsHandler)
+	//v1.GET("/ws/channel/:channel", ctrl.wsChannelHandler)
 
 	ctrl.router.GET("/swagger/*any", swaggerui.CustomHandler(
 		swaggerui.WithTitle("WSBroker API"),
@@ -280,14 +292,14 @@ func (ctrl *controller) checkBearer(c *gin.Context) bool {
 	}
 	authHeader := c.Request.Header.Get("Authorization")
 	token := ""
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		token = strings.TrimPrefix(authHeader, "Bearer ")
+	if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
+		token = after
 	} else if qToken := c.Query("token"); qToken != "" {
 		token = qToken
 	} else if qBearer := c.Query("bearer"); qBearer != "" {
 		token = qBearer
 	}
-	if token != ctrl.bearer {
+	if subtle.ConstantTimeCompare([]byte(token), []byte(ctrl.bearer)) != 1 {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
 			Code:    http.StatusUnauthorized,
 			Message: "invalid bearer token",
@@ -295,6 +307,99 @@ func (ctrl *controller) checkBearer(c *gin.Context) bool {
 		return false
 	}
 	return true
+}
+
+func (ctrl *controller) checkBearerSilent(c *gin.Context) bool {
+	if len(ctrl.bearer) == 0 {
+		return false
+	}
+	authHeader := c.Request.Header.Get("Authorization")
+	token := ""
+	if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
+		token = after
+	} else if qToken := c.Query("token"); qToken != "" {
+		token = qToken
+	} else if qBearer := c.Query("bearer"); qBearer != "" {
+		token = qBearer
+	}
+	if token == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(token), []byte(ctrl.bearer)) == 1
+}
+
+func (ctrl *controller) dashboardSecurityMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Set security headers
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data:; connect-src 'self'")
+		c.Header("Referrer-Policy", "same-origin")
+
+		// Validate Origin / Referer for state-modifying HTTP methods (CSRF protection)
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
+			origin := c.Request.Header.Get("Origin")
+			referer := c.Request.Header.Get("Referer")
+
+			if origin != "" {
+				u, err := url.Parse(origin)
+				if err != nil || (u.Host != c.Request.Host && !strings.EqualFold(u.Host, c.Request.Host)) {
+					c.AbortWithStatusJSON(http.StatusForbidden, HTTPResultMessage{
+						Code:    http.StatusForbidden,
+						Message: "forbidden: invalid origin header",
+					})
+					return
+				}
+			} else if referer != "" {
+				u, err := url.Parse(referer)
+				if err != nil || (u.Host != c.Request.Host && !strings.EqualFold(u.Host, c.Request.Host)) {
+					c.AbortWithStatusJSON(http.StatusForbidden, HTTPResultMessage{
+						Code:    http.StatusForbidden,
+						Message: "forbidden: invalid referer header",
+					})
+					return
+				}
+			}
+		}
+
+		c.Next()
+	}
+}
+
+func (ctrl *controller) dashboardAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// If neither basic auth credentials nor bearer auth are configured, permit access
+		if ctrl.dashboardUser == "" && ctrl.dashboardPass == "" && (!ctrl.allowDashboardBearer || ctrl.bearer == "") {
+			c.Next()
+			return
+		}
+
+		// 1. Check HTTP Basic Auth if credentials are configured
+		if ctrl.dashboardUser != "" || ctrl.dashboardPass != "" {
+			user, pass, hasBasic := c.Request.BasicAuth()
+			if hasBasic {
+				userMatch := subtle.ConstantTimeCompare([]byte(user), []byte(ctrl.dashboardUser)) == 1
+				passMatch := subtle.ConstantTimeCompare([]byte(pass), []byte(ctrl.dashboardPass)) == 1
+				if userMatch && passMatch {
+					c.Next()
+					return
+				}
+			}
+		}
+
+		// 2. Check Bearer Auth Fallback if allowed
+		if ctrl.allowDashboardBearer && ctrl.checkBearerSilent(c) {
+			c.Next()
+			return
+		}
+
+		// 3. Challenge when unauthenticated or invalid credentials
+		c.Header("WWW-Authenticate", `Basic realm="WSBroker Dashboard"`)
+		c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
+			Code:    http.StatusUnauthorized,
+			Message: "unauthorized dashboard access",
+		})
+	}
 }
 
 // ping godoc
@@ -531,6 +636,16 @@ func (ctrl *controller) wsHandler(c *gin.Context) {
 		return
 	}
 
+	modeParam := c.Param("mode")
+	mode, err := broker.ParseConnectionMode(modeParam)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, HTTPResultMessage{
+			Code:    http.StatusBadRequest,
+			Message: fmt.Sprintf("invalid connection mode: %s", modeParam),
+		})
+		return
+	}
+
 	opts := &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
 		OriginPatterns:     []string{"*"},
@@ -541,7 +656,7 @@ func (ctrl *controller) wsHandler(c *gin.Context) {
 		return
 	}
 
-	ctrl.handleWSConnection(c, conn, name)
+	ctrl.handleWSConnection(c, conn, name, mode)
 }
 
 func (ctrl *controller) wsChannelHandler(c *gin.Context) {
@@ -554,6 +669,16 @@ func (ctrl *controller) wsChannelHandler(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, HTTPResultMessage{
 			Code:    http.StatusBadRequest,
 			Message: "channel name is required",
+		})
+		return
+	}
+
+	modeParam := c.Param("mode")
+	mode, err := broker.ParseConnectionMode(modeParam)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, HTTPResultMessage{
+			Code:    http.StatusBadRequest,
+			Message: fmt.Sprintf("invalid connection mode: %s", modeParam),
 		})
 		return
 	}
@@ -578,11 +703,11 @@ func (ctrl *controller) wsChannelHandler(c *gin.Context) {
 		return
 	}
 
-	ctrl.handleWSConnection(c, conn, clientName, channel)
+	ctrl.handleWSConnection(c, conn, clientName, mode, channel)
 }
 
-func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn, name string, initialChannels ...string) {
-	wsConn := broker.NewConnection(conn, name, c.Request.TLS != nil)
+func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn, name string, mode broker.ConnectionMode, initialChannels ...string) {
+	wsConn := broker.NewConnectionWithMode(conn, name, c.Request.TLS != nil, mode)
 	if err := ctrl.broker.AddWSConn(wsConn); err != nil {
 		ctrl.logger.Error().Err(err).Msgf("failed to register connection %s", name)
 		_ = conn.Close(websocket.StatusInternalError, "failed to register connection")
@@ -687,6 +812,10 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 				Data:   evt.Data,
 			})
 		default:
+			if !mode.CanWrite() {
+				ctrl.logger.Warn().Msgf("read-only client %s attempted to send event type %s, dropping", name, evt.Type)
+				continue
+			}
 			if err := ctrl.broker.Send(evt); err != nil {
 				ctrl.logger.Error().Err(err).Msgf("failed to forward event %s from client %s", evt.String(), name)
 			}

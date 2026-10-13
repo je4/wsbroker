@@ -14,6 +14,14 @@ import (
 	"go.ub.unibas.ch/cloud/certloader/v2/pkg/loader"
 )
 
+// DashboardConfig holds configuration settings for the web dashboard.
+type DashboardConfig struct {
+	Enabled     bool             `toml:"enabled"`
+	Username    config.EnvString `toml:"username"`
+	Password    config.EnvString `toml:"password"`
+	AllowBearer bool             `toml:"allow_bearer"`
+}
+
 // WSBrokerConfig holds the complete configuration options for running the WSBroker service.
 type WSBrokerConfig struct {
 	LocalAddr    string             `toml:"localaddr"`
@@ -22,6 +30,7 @@ type WSBrokerConfig struct {
 	NumWorkers   int                `toml:"num_workers"`
 	Debug        bool               `toml:"debug"`
 	RESTTLS      loader.Config      `toml:"resttls"`
+	Dashboard    DashboardConfig    `toml:"dashboard"`
 	Log          stashconfig.Config `toml:"log"`
 }
 

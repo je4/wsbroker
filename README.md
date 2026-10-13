@@ -36,7 +36,7 @@
 
 - **Modern WebSocket Engine:** Powered by [`coder/websocket`](https://github.com/coder/websocket) with context-aware timeouts and concurrent safety.
 - **Dynamic Channel / Group Pub-Sub:**
-  - Subscribe upon connection via URL paths (`/ws/channel/:channel`) or query params (`?channel=alerts&channel=general`).
+  - Subscribe upon connection via URL paths (`/ws/channel/:channel/:mode`) or query params (`?channel=alerts&channel=general`).
   - Dynamically join or leave channels at runtime using standard `attach` and `detach` WebSocket events.
 - **High-Throughput Asynchronous Worker Pool:**
   - Inbound messages are enqueued into a buffered worker pipeline (`runtime.NumCPU()` parallel goroutines by default) preventing slow consumer blocking.
@@ -68,7 +68,7 @@ graph TB
 
     subgraph WSBroker["WSBroker Service"]
         subgraph REST["REST & Web Layer (Gin)"]
-            WSHandler["WebSocket Handler\n(/ws/:name, /ws/channel/:channel)"]
+            WSHandler["WebSocket Handler\n(/ws/:name/:mode, /ws/channel/:channel/:mode)"]
             RESTHandler["REST API Endpoints\n(/api/v1/publish, /api/v1/channels)"]
             DashHandler["HTMX Dashboard\n(/dashboard)"]
             Swagger["Swagger UI\n(/swagger/index.html)"]
@@ -152,7 +152,7 @@ sequenceDiagram
     participant CM as ConnectionManager
 
     Note over Client,Server: 1. Connection & Initial Subscription
-    Client->>Server: GET /ws/client-01?channel=alerts&channel=news
+    Client->>Server: GET /ws/client-01/rw?channel=alerts&channel=news
     Server->>Server: Validate Bearer token & Upgrade HTTP to WebSocket
     Server->>CM: AddWSConn("client-01")
     Server->>CM: AddToGroup("client-01", "alerts")
@@ -187,10 +187,13 @@ sequenceDiagram
 
 | Endpoint | Description |
 | :--- | :--- |
-| `GET /ws/:name` | Connect client with explicit name `:name`. |
-| `GET /ws/channel/:channel` | Connect client and automatically subscribe to channel `:channel`. |
-| `GET /api/v1/ws/:name` | Connect client with explicit name under API prefix. |
-| `GET /api/v1/ws/channel/:channel` | Connect client and subscribe to channel under API prefix. |
+| `GET /ws/:name/:mode` | Connect client with explicit name `:name` and mandatory access mode `:mode` (`rw`, `ro`, `wo`/`w`). |
+| `GET /ws/channel/:channel/:mode` | Connect client, automatically subscribe to channel `:channel`, with mandatory access mode `:mode`. |
+
+#### Connection Modes
+- `rw` (Read-Write): Bidirectional client capable of publishing events and receiving channel broadcasts / direct messages.
+- `ro` (Read-Only): Consumer client that receives broadcasts and messages, but is restricted from publishing events to channels or direct targets.
+- `wo` or `w` (Write-Only): Producer / ingest client that can publish events, but does not receive any broadcasts or messages, eliminating unnecessary egress traffic.
 
 #### Connection Query Parameters
 - `channel`: Channel name to subscribe to on connect (multiple parameters supported, e.g. `?channel=alerts&channel=logs`).
@@ -373,7 +376,7 @@ go test -v -count=1 ./...
 
 ```javascript
 const clientName = "browser-" + Math.floor(Math.random() * 1000);
-const ws = new WebSocket(`ws://localhost:8080/ws/${clientName}?channel=alerts`);
+const ws = new WebSocket(`ws://localhost:8080/ws/${clientName}/rw?channel=alerts`);
 
 ws.onopen = () => {
     console.log("Connected to WSBroker as", clientName);

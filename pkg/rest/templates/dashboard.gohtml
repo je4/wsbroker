@@ -209,6 +209,12 @@
                 if (msg) msg.focus();
             }
         }
+
+        document.body.addEventListener('htmx:responseError', function (evt) {
+            if (evt.detail && evt.detail.xhr && evt.detail.xhr.status === 401) {
+                window.location.reload();
+            }
+        });
     </script>
 </body>
 </html>

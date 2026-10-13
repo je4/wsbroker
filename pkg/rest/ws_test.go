@@ -38,22 +38,22 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// 1. Connect Client A via /ws/clientA?bearer=test-secret
-	cA, _, err := websocket.Dial(ctx, wsURL+"/ws/clientA?bearer="+bearer, nil)
+	// 1. Connect Client A via /ws/clientA/rw?bearer=test-secret
+	cA, _, err := websocket.Dial(ctx, wsURL+"/ws/clientA/rw?bearer="+bearer, nil)
 	if err != nil {
 		t.Fatalf("clientA dial failed: %v", err)
 	}
 	defer cA.Close(websocket.StatusNormalClosure, "")
 
-	// 2. Connect Client B via /ws/clientB?channel=room1&bearer=test-secret
-	cB, _, err := websocket.Dial(ctx, wsURL+"/ws/clientB?channel=room1&bearer="+bearer, nil)
+	// 2. Connect Client B via /ws/clientB/rw?channel=room1&bearer=test-secret
+	cB, _, err := websocket.Dial(ctx, wsURL+"/ws/clientB/rw?channel=room1&bearer="+bearer, nil)
 	if err != nil {
 		t.Fatalf("clientB dial failed: %v", err)
 	}
 	defer cB.Close(websocket.StatusNormalClosure, "")
 
-	// 3. Connect Client C via /ws/channel/room1?name=clientC&bearer=test-secret
-	cC, _, err := websocket.Dial(ctx, wsURL+"/ws/channel/room1?name=clientC&bearer="+bearer, nil)
+	// 3. Connect Client C via /ws/channel/room1/rw?name=clientC&bearer=test-secret
+	cC, _, err := websocket.Dial(ctx, wsURL+"/ws/channel/room1/rw?name=clientC&bearer="+bearer, nil)
 	if err != nil {
 		t.Fatalf("clientC dial failed: %v", err)
 	}
@@ -238,12 +238,230 @@ func TestWebSocketAuthFailure(t *testing.T) {
 	defer cancel()
 
 	// Dial with wrong token -> should fail
-	c, resp, err := websocket.Dial(ctx, wsURL+"/ws/testClient?bearer=wrong-token", nil)
+	c, resp, err := websocket.Dial(ctx, wsURL+"/ws/testClient/rw?bearer=wrong-token", nil)
 	if err == nil {
 		c.Close(websocket.StatusNormalClosure, "")
 		t.Errorf("expected dial to fail with invalid token")
 	}
 	if resp != nil && resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected status 401 Unauthorized, got %d", resp.StatusCode)
+	}
+}
+
+func TestWebSocketModes_PermissionsAndSuppression(t *testing.T) {
+	logger := zerolog.Nop()
+	bearer := "test-secret"
+
+	ctrl, err := NewController(":0", "http://localhost:8765", nil, bearer, true, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+
+	ctrl.broker.Start(4)
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewServer(ctrl.router)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 1. Connect Read-Only client
+	cRO, _, err := websocket.Dial(ctx, wsURL+"/ws/channel/sharedRoom/ro?name=clientRO&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("clientRO dial failed: %v", err)
+	}
+	defer cRO.Close(websocket.StatusNormalClosure, "")
+
+	// 2. Connect Write-Only client (using 'w')
+	cWO, _, err := websocket.Dial(ctx, wsURL+"/ws/channel/sharedRoom/w?name=clientWO&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("clientWO dial failed: %v", err)
+	}
+	defer cWO.Close(websocket.StatusNormalClosure, "")
+
+	// 3. Connect Read-Write client
+	cRW, _, err := websocket.Dial(ctx, wsURL+"/ws/channel/sharedRoom/rw?name=clientRW&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("clientRW dial failed: %v", err)
+	}
+	defer cRW.Close(websocket.StatusNormalClosure, "")
+
+	var receivedRO = make(chan *event.Event, 10)
+	var receivedWO = make(chan *event.Event, 10)
+	var receivedRW = make(chan *event.Event, 10)
+
+	startReader := func(c *websocket.Conn, ch chan *event.Event) {
+		go func() {
+			for {
+				var evt event.Event
+				if err := wsjson.Read(ctx, c, &evt); err != nil {
+					break
+				}
+				ch <- &evt
+			}
+		}()
+	}
+
+	startReader(cRO, receivedRO)
+	startReader(cWO, receivedWO)
+	startReader(cRW, receivedRW)
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Step A: Write-Only client publishes message to sharedRoom
+	woEvt, _ := event.NewMessageEvent("clientWO", "sharedRoom", "msg from WO")
+	if err := wsjson.Write(ctx, cWO, woEvt); err != nil {
+		t.Fatalf("failed to send event from clientWO: %v", err)
+	}
+
+	// clientRO should receive it
+	select {
+	case evt := <-receivedRO:
+		d, _ := evt.GetData()
+		if d != "msg from WO" {
+			t.Errorf("clientRO expected 'msg from WO', got %v", d)
+		}
+	case <-time.After(1 * time.Second):
+		t.Errorf("clientRO timed out waiting for message from WO")
+	}
+
+	// clientRW should receive it
+	select {
+	case evt := <-receivedRW:
+		d, _ := evt.GetData()
+		if d != "msg from WO" {
+			t.Errorf("clientRW expected 'msg from WO', got %v", d)
+		}
+	case <-time.After(1 * time.Second):
+		t.Errorf("clientRW timed out waiting for message from WO")
+	}
+
+	// clientWO should NOT receive its own or any broadcast
+	select {
+	case evt := <-receivedWO:
+		t.Errorf("clientWO should NOT receive broadcast, got: %+v", evt)
+	case <-time.After(150 * time.Millisecond):
+		// Expected
+	}
+
+	// Step B: Read-Only client attempts to publish message to sharedRoom (should be dropped)
+	roEvt, _ := event.NewMessageEvent("clientRO", "sharedRoom", "illegal msg from RO")
+	if err := wsjson.Write(ctx, cRO, roEvt); err != nil {
+		t.Fatalf("failed to send event from clientRO: %v", err)
+	}
+
+	// clientRW should NOT receive the message dropped from clientRO
+	select {
+	case evt := <-receivedRW:
+		t.Errorf("clientRW should NOT receive dropped message from RO, got: %+v", evt)
+	case <-time.After(150 * time.Millisecond):
+		// Expected
+	}
+
+	// Step C: Read-Only client sends Ping -> should receive Pong back
+	pingEvt, _ := event.NewMessageEvent("clientRO", "wsbroker", "ping-payload")
+	pingEvt.Type = event.TypePing
+	if err := wsjson.Write(ctx, cRO, pingEvt); err != nil {
+		t.Fatalf("failed to send ping from clientRO: %v", err)
+	}
+
+	select {
+	case evt := <-receivedRO:
+		if evt.Type != event.TypePong {
+			t.Errorf("clientRO expected Pong event, got %v", evt.Type)
+		}
+		d, _ := evt.GetData()
+		if d != "ping-payload" {
+			t.Errorf("clientRO expected ping-payload, got %v", d)
+		}
+	case <-time.After(1 * time.Second):
+		t.Errorf("clientRO timed out waiting for pong event")
+	}
+
+	// Step D: Read-Write client publishes message to sharedRoom
+	rwEvt, _ := event.NewMessageEvent("clientRW", "sharedRoom", "msg from RW")
+	if err := wsjson.Write(ctx, cRW, rwEvt); err != nil {
+		t.Fatalf("failed to send event from clientRW: %v", err)
+	}
+
+	// clientRO should receive it
+	select {
+	case evt := <-receivedRO:
+		d, _ := evt.GetData()
+		if d != "msg from RW" {
+			t.Errorf("clientRO expected 'msg from RW', got %v", d)
+		}
+	case <-time.After(1 * time.Second):
+		t.Errorf("clientRO timed out waiting for message from RW")
+	}
+
+	// clientWO should NOT receive it
+	select {
+	case evt := <-receivedWO:
+		t.Errorf("clientWO should NOT receive broadcast from RW, got: %+v", evt)
+	case <-time.After(150 * time.Millisecond):
+		// Expected
+	}
+}
+
+func TestWebSocketModes_InvalidAndMissingMode(t *testing.T) {
+	logger := zerolog.Nop()
+	bearer := "test-secret"
+
+	ctrl, err := NewController(":0", "http://localhost:8765", nil, bearer, false, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewServer(ctrl.router)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// 1. Missing mode on /ws/:name (returns 404)
+	c, resp, err := websocket.Dial(ctx, wsURL+"/ws/clientWithoutMode?bearer="+bearer, nil)
+	if err == nil {
+		c.Close(websocket.StatusNormalClosure, "")
+		t.Errorf("expected missing mode connection to fail")
+	}
+	if resp != nil && resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected status 404 Not Found for unparameterized route, got %d", resp.StatusCode)
+	}
+
+	// 2. Missing mode on /ws/channel/:channel (returns 404)
+	c, resp, err = websocket.Dial(ctx, wsURL+"/ws/channel/roomWithoutMode?bearer="+bearer, nil)
+	if err == nil {
+		c.Close(websocket.StatusNormalClosure, "")
+		t.Errorf("expected missing mode connection to fail")
+	}
+	if resp != nil && resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected status 404 Not Found for unparameterized channel route, got %d", resp.StatusCode)
+	}
+
+	// 3. Invalid mode string on /ws/:name/:mode (returns 400 Bad Request)
+	c, resp, err = websocket.Dial(ctx, wsURL+"/ws/clientInvalidMode/invalid?bearer="+bearer, nil)
+	if err == nil {
+		c.Close(websocket.StatusNormalClosure, "")
+		t.Errorf("expected invalid mode connection to fail")
+	}
+	if resp != nil && resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected status 400 Bad Request for invalid mode, got %d", resp.StatusCode)
+	}
+
+	// 4. Invalid mode string on /ws/channel/:channel/:mode (returns 400 Bad Request)
+	c, resp, err = websocket.Dial(ctx, wsURL+"/ws/channel/room1/invalid?bearer="+bearer, nil)
+	if err == nil {
+		c.Close(websocket.StatusNormalClosure, "")
+		t.Errorf("expected invalid mode connection to fail")
+	}
+	if resp != nil && resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected status 400 Bad Request for invalid mode on channel, got %d", resp.StatusCode)
 	}
 }

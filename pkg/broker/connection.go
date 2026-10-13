@@ -4,6 +4,7 @@ package broker
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"emperror.dev/errors"
@@ -11,12 +12,57 @@ import (
 	"github.com/coder/websocket/wsjson"
 )
 
-// NewConnection creates and initializes a new Connection wrapper around a coder/websocket connection.
+// ConnectionMode specifies the access permission mode of a WebSocket connection.
+type ConnectionMode string
+
+const (
+	// ModeRW allows both reading (subscribing to events) and writing (publishing events).
+	ModeRW ConnectionMode = "rw"
+	// ModeRO allows only reading (subscribing to events), rejecting publish attempts.
+	ModeRO ConnectionMode = "ro"
+	// ModeWO allows only writing (publishing events), bypassing all outgoing broadcast deliveries.
+	ModeWO ConnectionMode = "wo"
+)
+
+// ParseConnectionMode parses and validates a string into a ConnectionMode.
+func ParseConnectionMode(s string) (ConnectionMode, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "rw", "readwrite":
+		return ModeRW, nil
+	case "ro", "readonly":
+		return ModeRO, nil
+	case "wo", "w", "writeonly":
+		return ModeWO, nil
+	default:
+		return "", errors.Errorf("invalid or missing connection mode: %s", s)
+	}
+}
+
+// CanRead returns true if the connection mode allows receiving messages/broadcasts.
+func (m ConnectionMode) CanRead() bool {
+	return m != ModeWO
+}
+
+// CanWrite returns true if the connection mode allows publishing messages.
+func (m ConnectionMode) CanWrite() bool {
+	return m != ModeRO
+}
+
+// NewConnection creates and initializes a new Connection wrapper with default ModeRW.
 func NewConnection(conn *websocket.Conn, name string, secure bool) *Connection {
+	return NewConnectionWithMode(conn, name, secure, ModeRW)
+}
+
+// NewConnectionWithMode creates and initializes a new Connection wrapper with the specified ConnectionMode.
+func NewConnectionWithMode(conn *websocket.Conn, name string, secure bool, mode ConnectionMode) *Connection {
+	if mode == "" {
+		mode = ModeRW
+	}
 	return &Connection{
 		Secure: secure,
 		Conn:   conn,
 		Name:   name,
+		Mode:   mode,
 	}
 }
 
@@ -25,6 +71,7 @@ type Connection struct {
 	Secure  bool
 	Conn    *websocket.Conn
 	Name    string
+	Mode    ConnectionMode
 	writeMu sync.Mutex
 }
 

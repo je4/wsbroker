@@ -4,6 +4,7 @@
         <thead class="bg-slate-950/60 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
             <tr>
                 <th class="py-3 px-4">Client Name</th>
+                <th class="py-3 px-4">Mode</th>
                 <th class="py-3 px-4">Security</th>
                 <th class="py-3 px-4">Channels</th>
                 <th class="py-3 px-4 text-right">Action</th>
@@ -15,6 +16,17 @@
                 <td class="py-3 px-4 font-mono font-medium text-white flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full bg-teal-400"></span>
                     {{ .Name }}
+                </td>
+                <td class="py-3 px-4">
+                    {{ if eq .Mode "rw" }}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">RW</span>
+                    {{ else if eq .Mode "ro" }}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 font-mono">RO</span>
+                    {{ else if eq .Mode "wo" }}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono">WO</span>
+                    {{ else }}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700 font-mono">{{ .Mode }}</span>
+                    {{ end }}
                 </td>
                 <td class="py-3 px-4">
                     {{ if .Secure }}
@@ -54,6 +66,6 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.828m2.829 2.828L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.828m-4.243 4.243a9 9 0 01-12.728 0m0 0l2.828-2.829m-2.828 2.829L3 21m2.828-12.728a5 5 0 017.072 0l-2.828 2.828" />
     </svg>
     <p class="text-sm font-medium text-slate-400">No active connections</p>
-    <p class="text-xs">Connect clients via <code class="font-mono text-teal-400 bg-slate-950 px-1.5 py-0.5 rounded">/ws/:name</code> or <code class="font-mono text-teal-400 bg-slate-950 px-1.5 py-0.5 rounded">/ws/channel/:channel</code>.</p>
+    <p class="text-xs">Connect clients via <code class="font-mono text-teal-400 bg-slate-950 px-1.5 py-0.5 rounded">/ws/:name/:mode</code> or <code class="font-mono text-teal-400 bg-slate-950 px-1.5 py-0.5 rounded">/ws/channel/:channel/:mode</code>.</p>
 </div>
 {{ end }}

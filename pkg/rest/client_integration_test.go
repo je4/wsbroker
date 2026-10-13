@@ -205,7 +205,7 @@ func TestWSBrokerClient_Integration(t *testing.T) {
 
 	// 3. Initialisiere WebSocket Clients
 	cliAlpha, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithEndpoint(server.URL+"/ws/client-alpha/rw"),
 		wsbrokerclient.WithClientName("client-alpha"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithInitialChannels("ch-main"),
@@ -216,7 +216,7 @@ func TestWSBrokerClient_Integration(t *testing.T) {
 	defer cliAlpha.Close()
 
 	cliBeta, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithEndpoint(server.URL+"/ws/client-beta/rw"),
 		wsbrokerclient.WithClientName("client-beta"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithInitialChannels("ch-main", "ch-alerts"),
@@ -463,7 +463,7 @@ func TestWSBrokerClient_CallbacksAndEventPublish(t *testing.T) {
 	defer restCli.Close()
 
 	cli, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithEndpoint(server.URL+"/ws/listener-client/rw"),
 		wsbrokerclient.WithClientName("listener-client"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithInitialChannels("metrics"),
@@ -551,7 +551,7 @@ func TestWSBrokerClient_AuthFailure(t *testing.T) {
 
 	// Client mit falschem Token konfigurieren
 	cliInvalid, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithEndpoint(server.URL+"/ws/unauthorized-client/rw"),
 		wsbrokerclient.WithClientName("unauthorized-client"),
 		wsbrokerclient.WithBearerToken("wrong-token"),
 	)
@@ -561,7 +561,7 @@ func TestWSBrokerClient_AuthFailure(t *testing.T) {
 	defer cliInvalid.Close()
 
 	if err := cliInvalid.ConnectSync(ctx); err == nil {
-		t.Fatal("expected ConnectSync to fail with invalid token, but it succeeded")
+		t.Fatal("expected ConnectSync with invalid token, but it succeeded")
 	}
 }
 
@@ -608,7 +608,7 @@ func TestWSBrokerClient_MTLSIntegration(t *testing.T) {
 
 	// 2. WebSocket Client über mTLS
 	cliTrusted, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithEndpoint(server.URL+"/ws/mtls-trusted-client/rw"),
 		wsbrokerclient.WithClientName("mtls-trusted-client"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithTLSConfig(clientTLS),
@@ -654,7 +654,7 @@ func TestWSBrokerClient_MTLSIntegration(t *testing.T) {
 
 	// 3. Negativtest: Client mit nicht vertrauenswürdigem Client-Zertifikat wird abgewiesen
 	cliUntrusted, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithEndpoint(server.URL+"/ws/mtls-rogue-client/rw"),
 		wsbrokerclient.WithClientName("mtls-rogue-client"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithTLSConfig(untrustedClientTLS),
@@ -673,7 +673,7 @@ func TestWSBrokerClient_MTLSIntegration(t *testing.T) {
 		RootCAs: clientTLS.RootCAs,
 	}
 	cliNoCert, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithEndpoint(server.URL+"/ws/mtls-no-cert-client/rw"),
 		wsbrokerclient.WithClientName("mtls-no-cert-client"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithTLSConfig(noCertTLS),

@@ -11,10 +11,8 @@ graph TB
     Router[Gin HTTP Router]
 
     subgraph "WebSocket Routes"
-        WS1["/ws/:name"]
-        WS2["/ws/channel/:channel"]
-        WS3["/api/v1/ws/:name"]
-        WS4["/api/v1/ws/channel/:channel"]
+        WS1["/ws/:name/:mode"]
+        WS2["/ws/channel/:channel/:mode"]
     end
 
     subgraph "REST API (/api/v1)"

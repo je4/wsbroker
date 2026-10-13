@@ -103,6 +103,7 @@ func (manager *ConnectionManager) worker(id int, jobs <-chan *job) {
 
 // Send enqueues an event for dispatch. If the event target matches a known channel/group,
 // the event is fanned out to all subscribers; otherwise, it is directed to the named client.
+// Subscribers with write-only mode (ModeWO) are omitted to avoid unnecessary allocations and writes.
 func (manager *ConnectionManager) Send(evt *event.Event) error {
 	if evt == nil {
 		return errors.New("event is nil")
@@ -120,8 +121,15 @@ func (manager *ConnectionManager) Send(evt *event.Event) error {
 	dests, ok := manager.groups[target]
 	if ok {
 		// Target is a group/channel
-		destsCopy := make([]string, len(dests))
-		copy(destsCopy, dests)
+		destsCopy := make([]string, 0, len(dests))
+		for _, dest := range dests {
+			if conn, exists := manager.GetWSConn(dest); exists {
+				if !conn.Mode.CanRead() {
+					continue
+				}
+			}
+			destsCopy = append(destsCopy, dest)
+		}
 		manager.groupsMu.RUnlock()
 
 		for _, dest := range destsCopy {
@@ -132,6 +140,11 @@ func (manager *ConnectionManager) Send(evt *event.Event) error {
 	manager.groupsMu.RUnlock()
 
 	// Target is a direct client
+	if conn, exists := manager.GetWSConn(target); exists {
+		if !conn.Mode.CanRead() {
+			return nil
+		}
+	}
 	manager.senderChannel <- &job{evt: evt, dest: target}
 	return nil
 }
@@ -141,6 +154,9 @@ func (manager *ConnectionManager) sendWS(dest string, evt *event.Event) error {
 	conn, ok := manager.GetWSConn(dest)
 	if !ok {
 		return errors.Errorf("no connection for destination %s", dest)
+	}
+	if !conn.Mode.CanRead() {
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -323,9 +339,10 @@ func (manager *ConnectionManager) GetChannelCounts() map[string]int {
 
 // ClientDetail describes a connected client, its TLS security status, and its channel subscriptions.
 type ClientDetail struct {
-	Name     string   `json:"name"`
-	Secure   bool     `json:"secure"`
-	Channels []string `json:"channels"`
+	Name     string         `json:"name"`
+	Secure   bool           `json:"secure"`
+	Mode     ConnectionMode `json:"mode"`
+	Channels []string       `json:"channels"`
 }
 
 // GetClientChannels returns all channel names that the given client is subscribed to.
@@ -361,6 +378,7 @@ func (manager *ConnectionManager) GetClientDetails() []ClientDetail {
 		details = append(details, ClientDetail{
 			Name:     name,
 			Secure:   conn.Secure,
+			Mode:     conn.Mode,
 			Channels: channels,
 		})
 	}

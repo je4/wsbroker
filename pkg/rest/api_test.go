@@ -121,5 +121,23 @@ func TestSwaggerAndPing(t *testing.T) {
 		if wPing.Code != http.StatusOK {
 			t.Errorf("expected 200 for ping without auth, got %d", wPing.Code)
 		}
+
+		// Unauthenticated request to /api/v1/publish returns 401
+		wPub := httptest.NewRecorder()
+		reqPub, _ := http.NewRequest(http.MethodPost, "/api/v1/publish", strings.NewReader(`{"target":"test","message":"hi"}`))
+		reqPub.Header.Set("Content-Type", "application/json")
+		ctrl.router.ServeHTTP(wPub, reqPub)
+		if wPub.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 for unauthenticated /api/v1/publish, got %d", wPub.Code)
+		}
+
+		// Authenticated request to /api/v1/protected succeeds with Bearer token
+		wProt := httptest.NewRecorder()
+		reqProt, _ := http.NewRequest(http.MethodGet, "/api/v1/protected", nil)
+		reqProt.Header.Set("Authorization", "Bearer "+bearer)
+		ctrl.router.ServeHTTP(wProt, reqProt)
+		if wProt.Code != http.StatusOK || wProt.Body.String() != "secret-data" {
+			t.Errorf("expected 200 secret-data for authenticated /api/v1/protected, got %d: %s", wProt.Code, wProt.Body.String())
+		}
 	}
 }
