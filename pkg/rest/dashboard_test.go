@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -33,10 +34,12 @@ func TestDashboardPageAndPartials(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	body := make([]byte, 100000)
-	n, _ := resp.Body.Read(body)
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	html := string(body[:n])
+	if err != nil {
+		t.Fatalf("failed to read body: %v", err)
+	}
+	html := string(body)
 
 	if !strings.Contains(html, "https://cdn.tailwindcss.com") {
 		t.Errorf("expected dashboard HTML to include Tailwind CDN")
@@ -47,6 +50,12 @@ func TestDashboardPageAndPartials(t *testing.T) {
 	if !strings.Contains(html, "WSBroker") || !strings.Contains(html, "Dashboard") {
 		t.Errorf("expected dashboard HTML to contain title")
 	}
+	if !strings.Contains(html, "prefers-color-scheme: dark") || !strings.Contains(html, "classList.add('dark')") {
+		t.Errorf("expected dashboard HTML to contain theme synchronization script")
+	}
+	if !strings.Contains(html, "dark:bg-slate-950") {
+		t.Errorf("expected dashboard HTML to contain dark mode background utility classes")
+	}
 
 	// 2. GET /dashboard/stats
 	respStats, err := http.Get(server.URL + "/dashboard/stats")
@@ -56,7 +65,15 @@ func TestDashboardPageAndPartials(t *testing.T) {
 	if respStats.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", respStats.StatusCode)
 	}
+	statsBody, err := io.ReadAll(respStats.Body)
 	respStats.Body.Close()
+	if err != nil {
+		t.Fatalf("failed to read stats body: %v", err)
+	}
+	statsHTML := string(statsBody)
+	if !strings.Contains(statsHTML, "bg-white") || !strings.Contains(statsHTML, "dark:bg-slate-900") {
+		t.Errorf("expected stats partial to contain dual light/dark background classes, got: %s", statsHTML)
+	}
 
 	// 3. GET /dashboard/connections
 	respConn, err := http.Get(server.URL + "/dashboard/connections")
@@ -66,7 +83,15 @@ func TestDashboardPageAndPartials(t *testing.T) {
 	if respConn.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", respConn.StatusCode)
 	}
+	connBody, err := io.ReadAll(respConn.Body)
 	respConn.Body.Close()
+	if err != nil {
+		t.Fatalf("failed to read connections body: %v", err)
+	}
+	connHTML := string(connBody)
+	if !strings.Contains(connHTML, "dark:text-slate-400") || !strings.Contains(connHTML, "dark:bg-slate-950") {
+		t.Errorf("expected connections partial to contain dual-theme classes, got: %s", connHTML)
+	}
 
 	// 4. GET /dashboard/channels
 	respCh, err := http.Get(server.URL + "/dashboard/channels")
@@ -76,7 +101,15 @@ func TestDashboardPageAndPartials(t *testing.T) {
 	if respCh.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", respCh.StatusCode)
 	}
+	chBody, err := io.ReadAll(respCh.Body)
 	respCh.Body.Close()
+	if err != nil {
+		t.Fatalf("failed to read channels body: %v", err)
+	}
+	chHTML := string(chBody)
+	if !strings.Contains(chHTML, "dark:text-slate-400") || !strings.Contains(chHTML, "dark:bg-slate-950") {
+		t.Errorf("expected channels partial to contain dual-theme classes, got: %s", chHTML)
+	}
 }
 
 func TestDashboardConnectionManagementAndPublish(t *testing.T) {
@@ -117,10 +150,12 @@ func TestDashboardConnectionManagementAndPublish(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /dashboard/connections failed: %v", err)
 	}
-	buf := make([]byte, 100000)
-	n, _ := respConn.Body.Read(buf)
+	connBytes, err := io.ReadAll(respConn.Body)
 	respConn.Body.Close()
-	connHTML := string(buf[:n])
+	if err != nil {
+		t.Fatalf("failed to read connections body: %v", err)
+	}
+	connHTML := string(connBytes)
 
 	if !strings.Contains(connHTML, "client-dash-A") || !strings.Contains(connHTML, "client-dash-B") {
 		t.Errorf("expected connections HTML to contain client-dash-A and client-dash-B, got: %s", connHTML)
@@ -134,9 +169,12 @@ func TestDashboardConnectionManagementAndPublish(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /dashboard/channels failed: %v", err)
 	}
-	n, _ = respCh.Body.Read(buf)
+	chBytes, err := io.ReadAll(respCh.Body)
 	respCh.Body.Close()
-	chHTML := string(buf[:n])
+	if err != nil {
+		t.Fatalf("failed to read channels body: %v", err)
+	}
+	chHTML := string(chBytes)
 
 	if !strings.Contains(chHTML, "general") || !strings.Contains(chHTML, "alerts") {
 		t.Errorf("expected channels HTML to contain channels, got: %s", chHTML)
@@ -156,9 +194,12 @@ func TestDashboardConnectionManagementAndPublish(t *testing.T) {
 	if respPub.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 OK from publish, got %d", respPub.StatusCode)
 	}
-	n, _ = respPub.Body.Read(buf)
+	pubBytes, err := io.ReadAll(respPub.Body)
 	respPub.Body.Close()
-	pubHTML := string(buf[:n])
+	if err != nil {
+		t.Fatalf("failed to read publish body: %v", err)
+	}
+	pubHTML := string(pubBytes)
 
 	if !strings.Contains(pubHTML, "Message sent successfully") {
 		t.Errorf("expected publish response to indicate success, got: %s", pubHTML)
@@ -186,9 +227,12 @@ func TestDashboardConnectionManagementAndPublish(t *testing.T) {
 	if respDel.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 OK from disconnect, got %d", respDel.StatusCode)
 	}
-	n, _ = respDel.Body.Read(buf)
+	delBytes, err := io.ReadAll(respDel.Body)
 	respDel.Body.Close()
-	delHTML := string(buf[:n])
+	if err != nil {
+		t.Fatalf("failed to read disconnect body: %v", err)
+	}
+	delHTML := string(delBytes)
 
 	if strings.Contains(delHTML, "client-dash-A") {
 		t.Errorf("expected client-dash-A to be removed after disconnect, got: %s", delHTML)

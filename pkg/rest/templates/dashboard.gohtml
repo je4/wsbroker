@@ -1,9 +1,22 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WSBroker Dashboard</title>
+    <script>
+        function syncTheme() {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        }
+        syncTheme();
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
+        }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@2.0.11"></script>
     <script>
@@ -24,34 +37,34 @@
         }
     </script>
 </head>
-<body class="min-h-full flex flex-col font-sans antialiased bg-slate-950 text-slate-100">
+<body class="min-h-full flex flex-col font-sans antialiased bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
     <!-- Navigation / Header -->
-    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
+    <header class="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center space-x-3">
-                <div class="p-2 bg-teal-500/10 border border-teal-500/20 rounded-lg text-teal-400">
+                <div class="p-2 bg-teal-500/10 border border-teal-500/20 rounded-lg text-teal-600 dark:text-teal-400">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                 </div>
                 <div>
-                    <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                    <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
                         WSBroker
-                        <span class="text-xs px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/30">Dashboard</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/30">Dashboard</span>
                     </h1>
-                    <p class="text-xs text-slate-400">WebSocket & Channel Management System</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">WebSocket & Channel Management System</p>
                 </div>
             </div>
             <div class="flex items-center gap-3">
                 <button 
                     onclick="htmx.trigger('#stats-container', 'refresh'); htmx.trigger('#connections-container', 'refresh'); htmx.trigger('#channels-container', 'refresh');"
-                    class="px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-md border border-slate-700 transition flex items-center gap-1.5">
+                    class="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:bg-slate-300 dark:active:bg-slate-600 rounded-md border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
                     Refresh
                 </button>
-                <a href="/swagger/index.html" target="_blank" class="px-3 py-1.5 text-xs font-medium text-teal-300 bg-teal-950/60 hover:bg-teal-900/60 rounded-md border border-teal-800/50 transition">
+                <a href="/swagger/index.html" target="_blank" class="px-3 py-1.5 text-xs font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/60 rounded-md border border-teal-200 dark:border-teal-800/50 transition">
                     Swagger API
                 </a>
             </div>
@@ -72,13 +85,13 @@
             <!-- Left / Center: Connections & Channels (2 cols) -->
             <div class="lg:col-span-2 space-y-8">
                 <!-- Active Connections Card -->
-                <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-                    <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm dark:shadow-xl">
+                    <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                         <div class="flex items-center gap-2">
-                            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                            <h2 class="text-base font-semibold text-white">Active Connections</h2>
+                            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
+                            <h2 class="text-base font-semibold text-slate-900 dark:text-white">Active Connections</h2>
                         </div>
-                        <span class="text-xs text-slate-400">Live update every 3s</span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400">Live update every 3s</span>
                     </div>
                     <div id="connections-container" 
                          hx-get="/dashboard/connections" 
@@ -90,15 +103,15 @@
                 </div>
 
                 <!-- Channels Overview Card -->
-                <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-                    <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm dark:shadow-xl">
+                    <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                         <div class="flex items-center gap-2">
-                            <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-4 h-4 text-teal-600 dark:text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
                             </svg>
-                            <h2 class="text-base font-semibold text-white">Active Channels</h2>
+                            <h2 class="text-base font-semibold text-slate-900 dark:text-white">Active Channels</h2>
                         </div>
-                        <span class="text-xs text-slate-400">Subscribed groups</span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400">Subscribed groups</span>
                     </div>
                     <div id="channels-container" 
                          hx-get="/dashboard/channels" 
@@ -112,15 +125,15 @@
 
             <!-- Right: Publish Message Form (1 col) -->
             <div class="space-y-8">
-                <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl sticky top-24">
-                    <div class="px-6 py-4 border-b border-slate-800">
-                        <h2 class="text-base font-semibold text-white flex items-center gap-2">
-                            <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm dark:shadow-xl sticky top-24">
+                    <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+                        <h2 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                            <svg class="w-4 h-4 text-teal-600 dark:text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                             </svg>
                             Send Message
                         </h2>
-                        <p class="text-xs text-slate-400 mt-0.5">Publish to channel or direct client</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Publish to channel or direct client</p>
                     </div>
                     <div class="p-6">
                         <form hx-post="/dashboard/publish" 
@@ -128,56 +141,56 @@
                               hx-swap="innerHTML"
                               class="space-y-4">
                             <div>
-                                <label for="publish-target" class="block text-xs font-medium text-slate-300 mb-1">
-                                    Target (Channel / Client) <span class="text-rose-400">*</span>
+                                <label for="publish-target" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                    Target (Channel / Client) <span class="text-rose-500 dark:text-rose-400">*</span>
                                 </label>
                                 <input type="text" 
                                        id="publish-target" 
                                        name="target" 
                                        required 
                                        placeholder="e.g. alerts or client-123" 
-                                       class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition">
+                                       class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition">
                             </div>
 
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label for="publish-type" class="block text-xs font-medium text-slate-300 mb-1">
+                                    <label for="publish-type" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                                         Event Type
                                     </label>
                                     <select id="publish-type" 
                                             name="type" 
-                                            class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition">
+                                            class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition">
                                         <option value="message" selected>message</option>
                                         <option value="ping">ping</option>
                                         <option value="custom">custom</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label for="publish-source" class="block text-xs font-medium text-slate-300 mb-1">
+                                    <label for="publish-source" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                                         Source
                                     </label>
                                     <input type="text" 
                                            id="publish-source" 
                                            name="source" 
                                            value="dashboard" 
-                                           class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition">
+                                           class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition">
                                 </div>
                             </div>
 
                             <div>
-                                <label for="publish-message" class="block text-xs font-medium text-slate-300 mb-1">
-                                    Message / Payload <span class="text-rose-400">*</span>
+                                <label for="publish-message" class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                    Message / Payload <span class="text-rose-500 dark:text-rose-400">*</span>
                                 </label>
                                 <textarea id="publish-message" 
                                           name="message" 
                                           rows="4" 
                                           required 
                                           placeholder="Message text or JSON object..." 
-                                          class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 font-mono transition"></textarea>
+                                          class="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 font-mono transition"></textarea>
                             </div>
 
                             <button type="submit" 
-                                    class="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium text-sm rounded-lg shadow-lg shadow-teal-900/30 transition flex items-center justify-center gap-2">
+                                    class="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-medium text-sm rounded-lg shadow-md shadow-teal-600/20 dark:shadow-lg dark:shadow-teal-900/30 transition flex items-center justify-center gap-2">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                                 </svg>
@@ -194,7 +207,7 @@
     </main>
 
     <!-- Footer -->
-    <footer class="border-t border-slate-800 bg-slate-950 py-4 mt-auto">
+    <footer class="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 py-4 mt-auto">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
             WSBroker Dashboard &bull; High-Performance WebSocket & Channel Broker
         </div>
