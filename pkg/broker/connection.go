@@ -4,59 +4,41 @@ package broker
 
 import (
 	"context"
-	"strings"
 	"sync"
 
 	"emperror.dev/errors"
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/je4/wsbrokerclient"
 )
 
+/*
+
 // ConnectionMode specifies the access permission mode of a WebSocket connection.
-type ConnectionMode string
+type ConnectionMode = wsbrokerclient.ConnectionMode
 
 const (
 	// ModeRW allows both reading (subscribing to events) and writing (publishing events).
-	ModeRW ConnectionMode = "rw"
+	ModeRW = wsbrokerclient.ModeRW
 	// ModeRO allows only reading (subscribing to events), rejecting publish attempts.
-	ModeRO ConnectionMode = "ro"
+	ModeRO = wsbrokerclient.ModeRO
 	// ModeWO allows only writing (publishing events), bypassing all outgoing broadcast deliveries.
-	ModeWO ConnectionMode = "wo"
+	ModeWO = wsbrokerclient.ModeWO
 )
+*/
 
 // ParseConnectionMode parses and validates a string into a ConnectionMode.
-func ParseConnectionMode(s string) (ConnectionMode, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "rw", "readwrite":
-		return ModeRW, nil
-	case "ro", "readonly":
-		return ModeRO, nil
-	case "wo", "w", "writeonly":
-		return ModeWO, nil
-	default:
-		return "", errors.Errorf("invalid or missing connection mode: %s", s)
-	}
-}
-
-// CanRead returns true if the connection mode allows receiving messages/broadcasts.
-func (m ConnectionMode) CanRead() bool {
-	return m != ModeWO
-}
-
-// CanWrite returns true if the connection mode allows publishing messages.
-func (m ConnectionMode) CanWrite() bool {
-	return m != ModeRO
-}
+var ParseConnectionMode = wsbrokerclient.ParseConnectionMode
 
 // NewConnection creates and initializes a new Connection wrapper with default ModeRW.
 func NewConnection(conn *websocket.Conn, name string, secure bool) *Connection {
-	return NewConnectionWithMode(conn, name, secure, ModeRW)
+	return NewConnectionWithMode(conn, name, secure, wsbrokerclient.ModeRW)
 }
 
 // NewConnectionWithMode creates and initializes a new Connection wrapper with the specified ConnectionMode.
-func NewConnectionWithMode(conn *websocket.Conn, name string, secure bool, mode ConnectionMode) *Connection {
+func NewConnectionWithMode(conn *websocket.Conn, name string, secure bool, mode wsbrokerclient.ConnectionMode) *Connection {
 	if mode == "" {
-		mode = ModeRW
+		mode = wsbrokerclient.ModeRW
 	}
 	return &Connection{
 		Secure: secure,
@@ -71,7 +53,7 @@ type Connection struct {
 	Secure  bool
 	Conn    *websocket.Conn
 	Name    string
-	Mode    ConnectionMode
+	Mode    wsbrokerclient.ConnectionMode
 	writeMu sync.Mutex
 }
 

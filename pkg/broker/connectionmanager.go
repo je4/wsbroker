@@ -12,6 +12,7 @@ import (
 
 	"emperror.dev/errors"
 	"github.com/je4/utils/v2/pkg/zLogger"
+	"github.com/je4/wsbrokerclient"
 	"github.com/je4/wsbrokerclient/pkg/event"
 )
 
@@ -56,6 +57,7 @@ func (manager *ConnectionManager) Start(numWorkers int) {
 	}
 	for i := 0; i < numWorkers; i++ {
 		manager.logger.Debug().Msgf("Starting broker worker #%d", i)
+		manager.workerWG.Add(1)
 		go manager.worker(i, manager.senderChannel)
 	}
 }
@@ -89,7 +91,6 @@ func (manager *ConnectionManager) Close() {
 
 // worker continuously receives outbound delivery jobs from the senderChannel and dispatches them.
 func (manager *ConnectionManager) worker(id int, jobs <-chan *job) {
-	manager.workerWG.Add(1)
 	defer manager.workerWG.Done()
 	for j := range jobs {
 		manager.logger.Debug().Msgf("worker #%d forwarding event %s %s -> %s to %s", id, j.evt.Type, j.evt.GetSource(), j.evt.GetTarget(), j.dest)
@@ -339,10 +340,10 @@ func (manager *ConnectionManager) GetChannelCounts() map[string]int {
 
 // ClientDetail describes a connected client, its TLS security status, and its channel subscriptions.
 type ClientDetail struct {
-	Name     string         `json:"name"`
-	Secure   bool           `json:"secure"`
-	Mode     ConnectionMode `json:"mode"`
-	Channels []string       `json:"channels"`
+	Name     string                        `json:"name"`
+	Secure   bool                          `json:"secure"`
+	Mode     wsbrokerclient.ConnectionMode `json:"mode"`
+	Channels []string                      `json:"channels"`
 }
 
 // GetClientChannels returns all channel names that the given client is subscribed to.

@@ -205,7 +205,8 @@ func TestWSBrokerClient_Integration(t *testing.T) {
 
 	// 3. Initialisiere WebSocket Clients
 	cliAlpha, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL+"/ws/client-alpha/rw"),
+		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithMode(wsbrokerclient.ModeRW),
 		wsbrokerclient.WithClientName("client-alpha"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithInitialChannels("ch-main"),
@@ -216,7 +217,8 @@ func TestWSBrokerClient_Integration(t *testing.T) {
 	defer cliAlpha.Close()
 
 	cliBeta, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL+"/ws/client-beta/rw"),
+		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithMode(wsbrokerclient.ModeRW),
 		wsbrokerclient.WithClientName("client-beta"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithInitialChannels("ch-main", "ch-alerts"),
@@ -463,7 +465,8 @@ func TestWSBrokerClient_CallbacksAndEventPublish(t *testing.T) {
 	defer restCli.Close()
 
 	cli, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL+"/ws/listener-client/rw"),
+		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithMode(wsbrokerclient.ModeRW),
 		wsbrokerclient.WithClientName("listener-client"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithInitialChannels("metrics"),
@@ -551,7 +554,8 @@ func TestWSBrokerClient_AuthFailure(t *testing.T) {
 
 	// Client mit falschem Token konfigurieren
 	cliInvalid, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL+"/ws/unauthorized-client/rw"),
+		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithMode(wsbrokerclient.ModeRW),
 		wsbrokerclient.WithClientName("unauthorized-client"),
 		wsbrokerclient.WithBearerToken("wrong-token"),
 	)
@@ -608,7 +612,8 @@ func TestWSBrokerClient_MTLSIntegration(t *testing.T) {
 
 	// 2. WebSocket Client über mTLS
 	cliTrusted, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL+"/ws/mtls-trusted-client/rw"),
+		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithMode(wsbrokerclient.ModeRW),
 		wsbrokerclient.WithClientName("mtls-trusted-client"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithTLSConfig(clientTLS),
@@ -654,7 +659,8 @@ func TestWSBrokerClient_MTLSIntegration(t *testing.T) {
 
 	// 3. Negativtest: Client mit nicht vertrauenswürdigem Client-Zertifikat wird abgewiesen
 	cliUntrusted, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL+"/ws/mtls-rogue-client/rw"),
+		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithMode(wsbrokerclient.ModeRW),
 		wsbrokerclient.WithClientName("mtls-rogue-client"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithTLSConfig(untrustedClientTLS),
@@ -673,7 +679,8 @@ func TestWSBrokerClient_MTLSIntegration(t *testing.T) {
 		RootCAs: clientTLS.RootCAs,
 	}
 	cliNoCert, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
-		wsbrokerclient.WithEndpoint(server.URL+"/ws/mtls-no-cert-client/rw"),
+		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithMode(wsbrokerclient.ModeRW),
 		wsbrokerclient.WithClientName("mtls-no-cert-client"),
 		wsbrokerclient.WithBearerToken(bearer),
 		wsbrokerclient.WithTLSConfig(noCertTLS),
@@ -685,5 +692,287 @@ func TestWSBrokerClient_MTLSIntegration(t *testing.T) {
 
 	if err := cliNoCert.ConnectSync(ctx); err == nil {
 		t.Fatal("expected ConnectSync without client certificate to fail, but it succeeded")
+	}
+}
+
+func TestWSBrokerClient_ConnectionModes(t *testing.T) {
+	logger := zerolog.Nop()
+	bearer := "modes-secret-token"
+
+	ctrl, err := NewController(":0", "http://localhost:8765", nil, bearer, true, &logger)
+	if err != nil {
+		t.Fatalf("failed to create rest controller: %v", err)
+	}
+
+	ctrl.broker.Start(4)
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewServer(ctrl.router)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// 1. Initialisiere Clients mit unterschiedlichen Verbindungs-Modi:
+	// - clientRO (ModeRO): Read-Only
+	// - clientWO (ModeWO): Write-Only
+	// - clientRW (ModeRW): Read-Write
+	cliRO, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
+		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithMode(wsbrokerclient.ModeRO),
+		wsbrokerclient.WithClientName("client-ro"),
+		wsbrokerclient.WithBearerToken(bearer),
+		wsbrokerclient.WithInitialChannels("mode-test-channel"),
+	)
+	if err != nil {
+		t.Fatalf("failed to create client-ro: %v", err)
+	}
+	defer cliRO.Close()
+
+	cliWO, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
+		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithMode(wsbrokerclient.ModeWO),
+		wsbrokerclient.WithClientName("client-wo"),
+		wsbrokerclient.WithBearerToken(bearer),
+		wsbrokerclient.WithInitialChannels("mode-test-channel"),
+	)
+	if err != nil {
+		t.Fatalf("failed to create client-wo: %v", err)
+	}
+	defer cliWO.Close()
+
+	cliRW, err := wsbrokerclient.New(wsbrokerclient.DefaultConfig(),
+		wsbrokerclient.WithEndpoint(server.URL),
+		wsbrokerclient.WithMode(wsbrokerclient.ModeRW),
+		wsbrokerclient.WithClientName("client-rw"),
+		wsbrokerclient.WithBearerToken(bearer),
+		wsbrokerclient.WithInitialChannels("mode-test-channel"),
+	)
+	if err != nil {
+		t.Fatalf("failed to create client-rw: %v", err)
+	}
+	defer cliRW.Close()
+
+	// Subscriptions auf mode-test-channel einrichten
+	subRO, err := cliRO.Subscribe(ctx, "mode-test-channel")
+	if err != nil {
+		t.Fatalf("client-ro failed to subscribe: %v", err)
+	}
+	defer subRO.Unsubscribe()
+
+	subWO, err := cliWO.Subscribe(ctx, "mode-test-channel")
+	if err != nil {
+		t.Fatalf("client-wo failed to subscribe: %v", err)
+	}
+	defer subWO.Unsubscribe()
+
+	subRW, err := cliRW.Subscribe(ctx, "mode-test-channel")
+	if err != nil {
+		t.Fatalf("client-rw failed to subscribe: %v", err)
+	}
+	defer subRW.Unsubscribe()
+
+	// Direct-Message Handler einrichten
+	roDirectReceived := make(chan *wsbrokerclient.Event, 5)
+	unsubRODirect := cliRO.OnDirect(func(evt *wsbrokerclient.Event) {
+		roDirectReceived <- evt
+	})
+	defer unsubRODirect()
+
+	woDirectReceived := make(chan *wsbrokerclient.Event, 5)
+	unsubWODirect := cliWO.OnDirect(func(evt *wsbrokerclient.Event) {
+		woDirectReceived <- evt
+	})
+	defer unsubWODirect()
+
+	rwDirectReceived := make(chan *wsbrokerclient.Event, 5)
+	unsubRWDirect := cliRW.OnDirect(func(evt *wsbrokerclient.Event) {
+		rwDirectReceived <- evt
+	})
+	defer unsubRWDirect()
+
+	// Alle Clients synchron verbinden
+	if err := cliRO.ConnectSync(ctx); err != nil {
+		t.Fatalf("client-ro failed to connect: %v", err)
+	}
+	if err := cliWO.ConnectSync(ctx); err != nil {
+		t.Fatalf("client-wo failed to connect: %v", err)
+	}
+	if err := cliRW.ConnectSync(ctx); err != nil {
+		t.Fatalf("client-rw failed to connect: %v", err)
+	}
+
+	// Modi an den Client-Objekten verifizieren
+	if cliRO.Mode() != wsbrokerclient.ModeRO {
+		t.Errorf("expected clientRO mode to be %s, got %s", wsbrokerclient.ModeRO, cliRO.Mode())
+	}
+	if cliWO.Mode() != wsbrokerclient.ModeWO {
+		t.Errorf("expected clientWO mode to be %s, got %s", wsbrokerclient.ModeWO, cliWO.Mode())
+	}
+	if cliRW.Mode() != wsbrokerclient.ModeRW {
+		t.Errorf("expected clientRW mode to be %s, got %s", wsbrokerclient.ModeRW, cliRW.Mode())
+	}
+
+	// === Test-Szenario 1: ModeWO (Write-Only) sendet Broadcast an Kanal ===
+	// Wenn WO an Kanal sendet:
+	// - RO empfängt es
+	// - RW empfängt es
+	// - WO empfängt es NICHT
+	woPayload := map[string]string{"msg": "broadcast from write-only client"}
+	if err := cliWO.Broadcast(ctx, "mode-test-channel", woPayload); err != nil {
+		t.Fatalf("client-wo failed to broadcast: %v", err)
+	}
+
+	select {
+	case evt := <-subRO.Events():
+		var data map[string]string
+		if err := evt.UnmarshalData(&data); err != nil {
+			t.Fatalf("failed to unmarshal WO broadcast on RO: %v", err)
+		}
+		if data["msg"] != "broadcast from write-only client" {
+			t.Errorf("unexpected payload on RO: %v", data)
+		}
+		if evt.Source != "client-wo" {
+			t.Errorf("expected source client-wo, got %s", evt.Source)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for WO broadcast on client-ro")
+	}
+
+	select {
+	case evt := <-subRW.Events():
+		var data map[string]string
+		if err := evt.UnmarshalData(&data); err != nil {
+			t.Fatalf("failed to unmarshal WO broadcast on RW: %v", err)
+		}
+		if data["msg"] != "broadcast from write-only client" {
+			t.Errorf("unexpected payload on RW: %v", data)
+		}
+		if evt.Source != "client-wo" {
+			t.Errorf("expected source client-wo, got %s", evt.Source)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for WO broadcast on client-rw")
+	}
+
+	select {
+	case evt := <-subWO.Events():
+		t.Fatalf("client-wo (ModeWO) should not have received broadcast event: %+v", evt)
+	case <-time.After(300 * time.Millisecond):
+		// Erwartet: WO empfängt nichts
+	}
+
+	// === Test-Szenario 2: ModeWO sendet Direct Message an ModeRO ===
+	// Wenn WO Direktnachricht an RO sendet:
+	// - RO empfängt Direktnachricht
+	woDirectPayload := map[string]string{"secret": "direct from wo to ro"}
+	if err := cliWO.SendDirect(ctx, "client-ro", woDirectPayload); err != nil {
+		t.Fatalf("client-wo failed to send direct to client-ro: %v", err)
+	}
+
+	select {
+	case evt := <-roDirectReceived:
+		var data map[string]string
+		if err := evt.UnmarshalData(&data); err != nil {
+			t.Fatalf("failed to unmarshal direct payload on RO: %v", err)
+		}
+		if data["secret"] != "direct from wo to ro" {
+			t.Errorf("unexpected direct payload on RO: %v", data)
+		}
+		if evt.Source != "client-wo" {
+			t.Errorf("expected source client-wo, got %s", evt.Source)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for direct message on client-ro")
+	}
+
+	// === Test-Szenario 3: ModeRW sendet Broadcast an Kanal ===
+	// Wenn RW an Kanal sendet:
+	// - RO empfängt es
+	// - RW empfängt es
+	// - WO empfängt es NICHT
+	rwPayload := map[string]string{"msg": "broadcast from read-write client"}
+	if err := cliRW.Broadcast(ctx, "mode-test-channel", rwPayload); err != nil {
+		t.Fatalf("client-rw failed to broadcast: %v", err)
+	}
+
+	select {
+	case evt := <-subRO.Events():
+		var data map[string]string
+		if err := evt.UnmarshalData(&data); err != nil {
+			t.Fatalf("failed to unmarshal RW broadcast on RO: %v", err)
+		}
+		if data["msg"] != "broadcast from read-write client" {
+			t.Errorf("unexpected payload on RO: %v", data)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for RW broadcast on client-ro")
+	}
+
+	select {
+	case evt := <-subRW.Events():
+		var data map[string]string
+		if err := evt.UnmarshalData(&data); err != nil {
+			t.Fatalf("failed to unmarshal RW broadcast on RW: %v", err)
+		}
+		if data["msg"] != "broadcast from read-write client" {
+			t.Errorf("unexpected payload on RW: %v", data)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for RW broadcast on client-rw")
+	}
+
+	select {
+	case evt := <-subWO.Events():
+		t.Fatalf("client-wo (ModeWO) should not receive channel broadcasts: %+v", evt)
+	case <-time.After(300 * time.Millisecond):
+		// Erwartet: WO empfängt nichts
+	}
+
+	// === Test-Szenario 4: Direktnachricht an ModeWO Client ===
+	// Wenn RW Direktnachricht an WO sendet:
+	// - Broker droppt Nachricht, da WO CanRead() == false
+	rwToWOPayload := map[string]string{"secret": "direct to wo client"}
+	if err := cliRW.SendDirect(ctx, "client-wo", rwToWOPayload); err != nil {
+		t.Fatalf("client-rw SendDirect to client-wo returned error: %v", err)
+	}
+
+	select {
+	case evt := <-woDirectReceived:
+		t.Fatalf("client-wo (ModeWO) should not receive direct messages: %+v", evt)
+	case <-time.After(300 * time.Millisecond):
+		// Erwartet: WO empfängt nichts
+	}
+
+	// === Test-Szenario 5: ModeRO (Read-Only) versucht Nachrichten zu senden ===
+	// Wenn RO versucht, Broadcast an Kanal zu senden:
+	// - Broker Server empfängt Event, erkennt !CanWrite() und verwirft das Event
+	// - Weder RW noch RO empfangen das verworfene Event
+	roPayload := map[string]string{"msg": "broadcast from read-only client"}
+	if err := cliRO.Broadcast(ctx, "mode-test-channel", roPayload); err != nil {
+		t.Fatalf("client-ro Broadcast call returned unexpected error: %v", err)
+	}
+
+	select {
+	case evt := <-subRW.Events():
+		t.Fatalf("client-rw should NOT receive broadcast from read-only client: %+v", evt)
+	case evt := <-subRO.Events():
+		t.Fatalf("client-ro should NOT receive its own dropped broadcast: %+v", evt)
+	case <-time.After(500 * time.Millisecond):
+		// Erwartet: Broadcast wurde vom Server verworfen
+	}
+
+	// Wenn RO versucht, Direktnachricht an RW zu senden:
+	// - Broker verwirft das Event
+	roDirectData := map[string]string{"secret": "direct from read-only client"}
+	if err := cliRO.SendDirect(ctx, "client-rw", roDirectData); err != nil {
+		t.Fatalf("client-ro SendDirect call returned unexpected error: %v", err)
+	}
+
+	select {
+	case evt := <-rwDirectReceived:
+		t.Fatalf("client-rw should NOT receive direct message from read-only client: %+v", evt)
+	case <-time.After(500 * time.Millisecond):
+		// Erwartet: Direktnachricht wurde vom Server verworfen
 	}
 }
