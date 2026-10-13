@@ -86,8 +86,8 @@ graph TB
         end
     end
 
-    Browser <-->|WebSocket (WSS/WS)| WSHandler
-    Service <-->|WebSocket (WSS/WS)| WSHandler
+    Browser <-- "WebSocket (WSS/WS)" --> WSHandler
+    Service <-- "WebSocket (WSS/WS)" --> WSHandler
     RESTProd -->|HTTP POST| RESTHandler
 
     WSHandler -->|Register / Route| ConnMgr
