@@ -19,6 +19,36 @@ import (
 	"github.com/je4/wsbrokerclient/pkg/event"
 )
 
+func getCertPermissions(c *gin.Context) *broker.CertPermissions {
+	if c.Request.TLS != nil && len(c.Request.TLS.PeerCertificates) > 0 {
+		return broker.ParseCertPermissions(c.Request.TLS.PeerCertificates[0])
+	}
+	return nil
+}
+
+func getRequestedChannels(c *gin.Context, initialChannels ...string) []string {
+	var channels []string
+	for _, ch := range initialChannels {
+		if ch != "" {
+			channels = append(channels, ch)
+		}
+	}
+	for _, ch := range c.QueryArray("channel") {
+		if ch != "" {
+			channels = append(channels, ch)
+		}
+	}
+	if qChannels := c.Query("channels"); qChannels != "" {
+		for _, ch := range strings.Split(qChannels, ",") {
+			ch = strings.TrimSpace(ch)
+			if ch != "" {
+				channels = append(channels, ch)
+			}
+		}
+	}
+	return channels
+}
+
 func (ctrl *controller) wsHandler(c *gin.Context) {
 	if !ctrl.checkBearer(c) {
 		return
@@ -43,6 +73,27 @@ func (ctrl *controller) wsHandler(c *gin.Context) {
 		return
 	}
 
+	certPerms := getCertPermissions(c)
+	if certPerms != nil && certPerms.HasRestrictions() {
+		if !certPerms.CanAccessClient(name) {
+			c.AbortWithStatusJSON(http.StatusForbidden, HTTPResultMessage{
+				Code:    http.StatusForbidden,
+				Message: fmt.Sprintf("certificate does not authorize client name '%s'", name),
+			})
+			return
+		}
+		requestedChannels := getRequestedChannels(c)
+		for _, ch := range requestedChannels {
+			if !certPerms.CanAccessChannel(ch, mode) {
+				c.AbortWithStatusJSON(http.StatusForbidden, HTTPResultMessage{
+					Code:    http.StatusForbidden,
+					Message: fmt.Sprintf("certificate does not authorize access to channel '%s' with mode '%s'", ch, mode),
+				})
+				return
+			}
+		}
+	}
+
 	opts := &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
 		OriginPatterns:     []string{"*"},
@@ -53,7 +104,7 @@ func (ctrl *controller) wsHandler(c *gin.Context) {
 		return
 	}
 
-	ctrl.handleWSConnection(c, conn, name, mode)
+	ctrl.handleWSConnection(c, conn, name, mode, certPerms)
 }
 
 func (ctrl *controller) wsChannelHandler(c *gin.Context) {
@@ -90,6 +141,34 @@ func (ctrl *controller) wsChannelHandler(c *gin.Context) {
 		clientName = fmt.Sprintf("client-%s", hex.EncodeToString(b))
 	}
 
+	certPerms := getCertPermissions(c)
+	if certPerms != nil && certPerms.HasRestrictions() {
+		if !certPerms.CanAccessChannel(channel, mode) {
+			c.AbortWithStatusJSON(http.StatusForbidden, HTTPResultMessage{
+				Code:    http.StatusForbidden,
+				Message: fmt.Sprintf("certificate does not authorize access to channel '%s' with mode '%s'", channel, mode),
+			})
+			return
+		}
+		if !certPerms.CanAccessClient(clientName) {
+			c.AbortWithStatusJSON(http.StatusForbidden, HTTPResultMessage{
+				Code:    http.StatusForbidden,
+				Message: fmt.Sprintf("certificate does not authorize client name '%s'", clientName),
+			})
+			return
+		}
+		requestedChannels := getRequestedChannels(c)
+		for _, ch := range requestedChannels {
+			if !certPerms.CanAccessChannel(ch, mode) {
+				c.AbortWithStatusJSON(http.StatusForbidden, HTTPResultMessage{
+					Code:    http.StatusForbidden,
+					Message: fmt.Sprintf("certificate does not authorize access to channel '%s' with mode '%s'", ch, mode),
+				})
+				return
+			}
+		}
+	}
+
 	opts := &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
 		OriginPatterns:     []string{"*"},
@@ -100,10 +179,10 @@ func (ctrl *controller) wsChannelHandler(c *gin.Context) {
 		return
 	}
 
-	ctrl.handleWSConnection(c, conn, clientName, mode, channel)
+	ctrl.handleWSConnection(c, conn, clientName, mode, certPerms, channel)
 }
 
-func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn, name string, mode wsbrokerclient.ConnectionMode, initialChannels ...string) {
+func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn, name string, mode wsbrokerclient.ConnectionMode, certPerms *broker.CertPermissions, initialChannels ...string) {
 	wsConn := broker.NewConnectionWithMode(conn, name, c.Request.TLS != nil, mode)
 	if err := ctrl.broker.AddWSConn(wsConn); err != nil {
 		ctrl.logger.Error().Err(err).Msgf("failed to register connection %s", name)
@@ -186,6 +265,10 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 				ch = evt.GetTarget()
 			}
 			if ch != "" {
+				if certPerms != nil && certPerms.HasRestrictions() && !certPerms.CanAccessChannel(ch, mode) {
+					ctrl.logger.Warn().Msgf("client %s certificate denied attach to channel %s with mode %s", name, ch, mode)
+					continue
+				}
 				ctrl.broker.AddToGroup(name, ch)
 			}
 		case event.TypeDetach:

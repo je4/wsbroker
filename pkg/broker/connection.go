@@ -12,8 +12,6 @@ import (
 	"github.com/je4/wsbrokerclient"
 )
 
-/*
-
 // ConnectionMode specifies the access permission mode of a WebSocket connection.
 type ConnectionMode = wsbrokerclient.ConnectionMode
 
@@ -25,7 +23,6 @@ const (
 	// ModeWO allows only writing (publishing events), bypassing all outgoing broadcast deliveries.
 	ModeWO = wsbrokerclient.ModeWO
 )
-*/
 
 // ParseConnectionMode parses and validates a string into a ConnectionMode.
 var ParseConnectionMode = wsbrokerclient.ParseConnectionMode
