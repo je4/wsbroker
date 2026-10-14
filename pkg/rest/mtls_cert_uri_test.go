@@ -144,6 +144,14 @@ func (env *mtlsTestEnv) makeClientTLS(t *testing.T, commonName string, uris ...s
 	}
 }
 
+func (env *mtlsTestEnv) makeClientTLSWithoutCert() *tls.Config {
+	return &tls.Config{
+		RootCAs:    env.caPool,
+		ServerName: "localhost",
+		MinVersion: tls.VersionTLS13,
+	}
+}
+
 func TestMTLSCertURIValidation_ClientAndChannelHandshake(t *testing.T) {
 	env := setupMTLSEnv(t)
 	logger := zerolog.Nop()
@@ -329,5 +337,344 @@ func TestMTLSCertURIValidation_DynamicAttach(t *testing.T) {
 	membersForbidden := ctrl.broker.GetChannelMembers("forbidden-channel")
 	if len(membersForbidden) != 0 {
 		t.Errorf("expected forbidden-channel to have 0 members, got %v", membersForbidden)
+	}
+}
+
+func TestAuthType_ConfigurationNormalization(t *testing.T) {
+	logger := zerolog.Nop()
+	ctrl, err := NewController(":0", "https://localhost:8765", nil, "test-bearer", false, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+
+	tests := []struct {
+		input    string
+		expected AuthType
+	}{
+		{"bearer", AuthTypeBearer},
+		{"BEARER", AuthTypeBearer},
+		{" Bearer ", AuthTypeBearer},
+		{"mtls", AuthTypeMTLS},
+		{"mTLS", AuthTypeMTLS},
+		{"MTLS", AuthTypeMTLS},
+		{"both", AuthTypeBoth},
+		{"Both", AuthTypeBoth},
+		{"BOTH", AuthTypeBoth},
+		{"", AuthTypeBearer},
+		{"unknown", AuthTypeBearer},
+		{"invalid-auth", AuthTypeBearer},
+	}
+
+	for _, tt := range tests {
+		ctrl.SetAuthType(tt.input)
+		if got := ctrl.GetAuthType(); got != tt.expected {
+			t.Errorf("SetAuthType(%q): expected %q, got %q", tt.input, tt.expected, got)
+		}
+	}
+}
+
+func TestAuthType_BothMode(t *testing.T) {
+	env := setupMTLSEnv(t)
+	env.serverTLS.ClientAuth = tls.VerifyClientCertIfGiven
+	logger := zerolog.Nop()
+	bearer := "test-secret-bearer"
+
+	ctrl, err := NewController(":0", "https://localhost:8765", nil, bearer, false, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+	ctrl.SetAuthType("both")
+	ctrl.broker.Start(2)
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewUnstartedServer(ctrl.router)
+	server.TLS = env.serverTLS
+	server.StartTLS()
+	defer server.Close()
+
+	wsURL := "wss" + strings.TrimPrefix(server.URL, "https")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	noCertTLS := env.makeClientTLSWithoutCert()
+	noCertDialOpts := &websocket.DialOptions{
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: noCertTLS,
+			},
+		},
+	}
+
+	validCertTLS := env.makeClientTLS(t, "cert-client",
+		"wsbroker:client:cert-client",
+		"wsbroker:channel:sensor-data:rw",
+	)
+	validCertDialOpts := &websocket.DialOptions{
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: validCertTLS,
+			},
+		},
+	}
+
+	// 1. Success with Bearer token (no client cert)
+	conn1, resp1, err := websocket.Dial(ctx, wsURL+"/ws/client-bearer/rw?bearer="+bearer, noCertDialOpts)
+	if err != nil {
+		t.Fatalf("expected successful bearer connection without cert, got err: %v", err)
+	}
+	if resp1.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("expected 101, got %d", resp1.StatusCode)
+	}
+	conn1.Close(websocket.StatusNormalClosure, "")
+
+	// 2. Success with token query parameter (no client cert)
+	conn2, resp2, err := websocket.Dial(ctx, wsURL+"/ws/client-bearer/rw?token="+bearer, noCertDialOpts)
+	if err != nil {
+		t.Fatalf("expected successful token connection without cert, got err: %v", err)
+	}
+	if resp2.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("expected 101, got %d", resp2.StatusCode)
+	}
+	conn2.Close(websocket.StatusNormalClosure, "")
+
+	// 3. Success with Authorization header (no client cert)
+	headerDialOpts := &websocket.DialOptions{
+		HTTPHeader: http.Header{
+			"Authorization": []string{"Bearer " + bearer},
+		},
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: noCertTLS,
+			},
+		},
+	}
+	conn3, resp3, err := websocket.Dial(ctx, wsURL+"/ws/client-bearer/rw", headerDialOpts)
+	if err != nil {
+		t.Fatalf("expected successful auth header connection without cert, got err: %v", err)
+	}
+	if resp3.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("expected 101, got %d", resp3.StatusCode)
+	}
+	conn3.Close(websocket.StatusNormalClosure, "")
+
+	// 4. Success with client cert fallback (no bearer token)
+	conn4, resp4, err := websocket.Dial(ctx, wsURL+"/ws/cert-client/rw?channel=sensor-data", validCertDialOpts)
+	if err != nil {
+		t.Fatalf("expected successful mTLS fallback connection, got err: %v", err)
+	}
+	if resp4.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("expected 101, got %d", resp4.StatusCode)
+	}
+	conn4.Close(websocket.StatusNormalClosure, "")
+
+	// 5. Invalid Bearer token with client cert must fail immediately (401, no silent fallback to mTLS)
+	_, resp5, err := websocket.Dial(ctx, wsURL+"/ws/cert-client/rw?bearer=wrong-token", validCertDialOpts)
+	if err == nil {
+		t.Fatalf("expected error on invalid bearer token, got success")
+	}
+	if resp5 == nil || resp5.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for invalid bearer, got resp: %v", resp5)
+	}
+
+	// 6. Neither Bearer token nor client cert -> 401 Unauthorized
+	_, resp6, err := websocket.Dial(ctx, wsURL+"/ws/anon-client/rw", noCertDialOpts)
+	if err == nil {
+		t.Fatalf("expected error when neither bearer nor cert is provided, got success")
+	}
+	if resp6 == nil || resp6.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got resp: %v", resp6)
+	}
+
+	// 7. Client cert with unauthorized channel (fallback mTLS) -> 403 Forbidden
+	_, resp7, err := websocket.Dial(ctx, wsURL+"/ws/cert-client/rw?channel=forbidden-channel", validCertDialOpts)
+	if err == nil {
+		t.Fatalf("expected error on unauthorized channel via cert, got success")
+	}
+	if resp7 == nil || resp7.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden, got resp: %v", resp7)
+	}
+
+	// 8. Client cert with unauthorized client name (fallback mTLS) -> 403 Forbidden
+	_, resp8, err := websocket.Dial(ctx, wsURL+"/ws/different-client/rw", validCertDialOpts)
+	if err == nil {
+		t.Fatalf("expected error on unauthorized client name via cert, got success")
+	}
+	if resp8 == nil || resp8.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden, got resp: %v", resp8)
+	}
+
+	// 9. Direct channel endpoint /ws/channel/:channel/:mode with Bearer (no cert)
+	chConn1, respCh1, err := websocket.Dial(ctx, wsURL+"/ws/channel/any-channel/rw?bearer="+bearer, noCertDialOpts)
+	if err != nil {
+		t.Fatalf("expected direct channel endpoint success with bearer, got err: %v", err)
+	}
+	if respCh1.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("expected 101, got %d", respCh1.StatusCode)
+	}
+	chConn1.Close(websocket.StatusNormalClosure, "")
+
+	// 10. Direct channel endpoint /ws/channel/:channel/:mode with cert fallback
+	chConn2, respCh2, err := websocket.Dial(ctx, wsURL+"/ws/channel/sensor-data/rw?name=cert-client", validCertDialOpts)
+	if err != nil {
+		t.Fatalf("expected direct channel endpoint success with cert fallback, got err: %v", err)
+	}
+	if respCh2.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("expected 101, got %d", respCh2.StatusCode)
+	}
+	chConn2.Close(websocket.StatusNormalClosure, "")
+}
+
+func TestAuthType_MTLSMode(t *testing.T) {
+	env := setupMTLSEnv(t)
+	env.serverTLS.ClientAuth = tls.VerifyClientCertIfGiven
+	logger := zerolog.Nop()
+	bearer := "test-secret-bearer"
+
+	ctrl, err := NewController(":0", "https://localhost:8765", nil, bearer, false, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+	ctrl.SetAuthType("mtls")
+	ctrl.broker.Start(2)
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewUnstartedServer(ctrl.router)
+	server.TLS = env.serverTLS
+	server.StartTLS()
+	defer server.Close()
+
+	wsURL := "wss" + strings.TrimPrefix(server.URL, "https")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	noCertTLS := env.makeClientTLSWithoutCert()
+	noCertDialOpts := &websocket.DialOptions{
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: noCertTLS,
+			},
+		},
+	}
+
+	validCertTLS := env.makeClientTLS(t, "mtls-client",
+		"wsbroker:client:mtls-client",
+		"wsbroker:channel:metrics:rw",
+	)
+	validCertDialOpts := &websocket.DialOptions{
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: validCertTLS,
+			},
+		},
+	}
+
+	// 1. Bearer provided but no client cert in mtls mode -> 401 Unauthorized
+	_, resp1, err := websocket.Dial(ctx, wsURL+"/ws/mtls-client/rw?bearer="+bearer, noCertDialOpts)
+	if err == nil {
+		t.Fatalf("expected 401 when connecting without client cert in mtls mode, got success")
+	}
+	if resp1 == nil || resp1.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got resp: %v", resp1)
+	}
+
+	// 2. Valid client cert -> Success
+	conn2, resp2, err := websocket.Dial(ctx, wsURL+"/ws/mtls-client/rw?channel=metrics", validCertDialOpts)
+	if err != nil {
+		t.Fatalf("expected successful mtls connection, got err: %v", err)
+	}
+	if resp2.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("expected 101, got %d", resp2.StatusCode)
+	}
+	conn2.Close(websocket.StatusNormalClosure, "")
+
+	// 3. Client name mismatch -> 403 Forbidden
+	_, resp3, err := websocket.Dial(ctx, wsURL+"/ws/wrong-client-name/rw?channel=metrics", validCertDialOpts)
+	if err == nil {
+		t.Fatalf("expected error on client name mismatch, got success")
+	}
+	if resp3 == nil || resp3.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden, got resp: %v", resp3)
+	}
+
+	// 4. Unauthorized channel -> 403 Forbidden
+	_, resp4, err := websocket.Dial(ctx, wsURL+"/ws/mtls-client/rw?channel=secret-channel", validCertDialOpts)
+	if err == nil {
+		t.Fatalf("expected error on unauthorized channel, got success")
+	}
+	if resp4 == nil || resp4.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden, got resp: %v", resp4)
+	}
+}
+
+func TestAuthType_BearerMode(t *testing.T) {
+	env := setupMTLSEnv(t)
+	env.serverTLS.ClientAuth = tls.VerifyClientCertIfGiven
+	logger := zerolog.Nop()
+	bearer := "test-secret-bearer"
+
+	ctrl, err := NewController(":0", "https://localhost:8765", nil, bearer, false, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+	ctrl.SetAuthType("bearer")
+	ctrl.broker.Start(2)
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewUnstartedServer(ctrl.router)
+	server.TLS = env.serverTLS
+	server.StartTLS()
+	defer server.Close()
+
+	wsURL := "wss" + strings.TrimPrefix(server.URL, "https")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	noCertTLS := env.makeClientTLSWithoutCert()
+	noCertDialOpts := &websocket.DialOptions{
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: noCertTLS,
+			},
+		},
+	}
+
+	validCertTLS := env.makeClientTLS(t, "bearer-client",
+		"wsbroker:client:bearer-client",
+		"wsbroker:channel:metrics:rw",
+	)
+	validCertDialOpts := &websocket.DialOptions{
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: validCertTLS,
+			},
+		},
+	}
+
+	// 1. Valid bearer token without client cert -> Success
+	conn1, resp1, err := websocket.Dial(ctx, wsURL+"/ws/bearer-client/rw?bearer="+bearer, noCertDialOpts)
+	if err != nil {
+		t.Fatalf("expected successful bearer connection, got err: %v", err)
+	}
+	if resp1.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("expected 101, got %d", resp1.StatusCode)
+	}
+	conn1.Close(websocket.StatusNormalClosure, "")
+
+	// 2. Invalid bearer token -> 401 Unauthorized
+	_, resp2, err := websocket.Dial(ctx, wsURL+"/ws/bearer-client/rw?bearer=invalid-token", noCertDialOpts)
+	if err == nil {
+		t.Fatalf("expected error on invalid bearer token, got success")
+	}
+	if resp2 == nil || resp2.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got resp: %v", resp2)
+	}
+
+	// 3. No bearer token provided (even with valid client cert) -> 401 Unauthorized
+	_, resp3, err := websocket.Dial(ctx, wsURL+"/ws/bearer-client/rw", validCertDialOpts)
+	if err == nil {
+		t.Fatalf("expected error when no bearer token is supplied in bearer mode, got success")
+	}
+	if resp3 == nil || resp3.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got resp: %v", resp3)
 	}
 }

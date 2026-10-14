@@ -32,6 +32,8 @@ type WSBrokerConfig struct {
 	RESTTLS      loader.Config      `toml:"resttls"`
 	Dashboard    DashboardConfig    `toml:"dashboard"`
 	Log          stashconfig.Config `toml:"log"`
+	AuthType     string             `toml:"authtype"`
+	AuthTypeAlt  string             `toml:"auth_type"`
 }
 
 var configdirs = []string{"~/.wsbroker.toml", "/etc/wsbroker.toml", "/opt/wsbroker/wsbroker.toml"}
@@ -48,23 +50,35 @@ func expandHomedir(fp string) string {
 // LoadWSBrokerConfig loads configuration defaults and decodes the TOML file at the specified path
 // or from standard search locations.
 func LoadWSBrokerConfig(fp string, conf *WSBrokerConfig) error {
-	if _, err := toml.Decode(localconfig.DefaultConfig, conf); err != nil {
+	md, err := toml.Decode(localconfig.DefaultConfig, conf)
+	if err != nil {
 		return errors.Wrap(err, "error decoding default config")
+	}
+	if md.IsDefined("auth_type") && !md.IsDefined("authtype") {
+		conf.AuthType = conf.AuthTypeAlt
 	}
 	if fp != "" {
 		fp = expandHomedir(fp)
-		if _, err := toml.DecodeFile(fp, conf); err != nil {
+		mdFile, err := toml.DecodeFile(fp, conf)
+		if err != nil {
 			return errors.Wrapf(err, "error loading config file %v", fp)
+		}
+		if mdFile.IsDefined("auth_type") && !mdFile.IsDefined("authtype") {
+			conf.AuthType = conf.AuthTypeAlt
 		}
 		return nil
 	}
 	for _, fp := range configdirs {
 		fp = expandHomedir(fp)
-		if _, err := toml.DecodeFile(fp, conf); err != nil {
+		mdFile, err := toml.DecodeFile(fp, conf)
+		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
 			return errors.Wrapf(err, "error loading config file %v", fp)
+		}
+		if mdFile.IsDefined("auth_type") && !mdFile.IsDefined("authtype") {
+			conf.AuthType = conf.AuthTypeAlt
 		}
 
 		break

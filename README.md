@@ -13,6 +13,12 @@
 - [Architecture Overview](#architecture-overview)
 - [Message Flow & Routing](#message-flow--routing)
 - [Client Lifecycle & Channel Subscriptions](#client-lifecycle--channel-subscriptions)
+- [Authentication & Authorization](#authentication--authorization)
+  - [Authentication Modes (`authtype`)](#authentication-modes-authtype)
+  - [Client Certificate SAN URIs](#client-certificate-san-uris)
+  - [Access Mode Hierarchy & Enforcement](#access-mode-hierarchy--enforcement)
+  - [REST API & Dashboard Security](#rest-api--dashboard-security)
+  - [Client Certificate Configuration Example](#client-certificate-configuration-example)
 - [WebSocket API](#websocket-api)
   - [Connection Endpoints](#connection-endpoints)
   - [Event Protocol Schema](#event-protocol-schema)
@@ -50,7 +56,10 @@
   - HTTP endpoints for publishing events, querying channel statistics, listing clients, and terminating connections.
   - Interactive Swagger / OpenAPI documentation available at `/swagger/index.html`.
 - **Security & Reliability:**
+  - Multi-mode authentication (`bearer`, `mtls`, `both`) for WebSocket connections and REST endpoints.
+  - Mutual TLS (mTLS) with fine-grained Subject Alternative Name (SAN) URI authorization for client identities and channel permissions.
   - Bearer Token authentication on WebSocket connections and REST endpoints.
+  - HTTP Basic Auth, optional Bearer fallback, and CSRF protection for the Web Dashboard.
   - Full TLS / WSS encryption support.
   - Automatic Ping/Pong heartbeats and graceful shutdown handling.
 
@@ -181,6 +190,123 @@ sequenceDiagram
 
 ---
 
+## Authentication & Authorization
+
+WSBroker provides a flexible security and authorization model supporting Bearer tokens, Mutual TLS (mTLS) with X.509 client certificate SAN URI permissions, and dashboard credentials.
+
+```mermaid
+graph TD
+    WSClient[Incoming WebSocket Client] --> CheckAuthType{Configured AuthType}
+    CheckAuthType -->|bearer| CheckBearer[Validate Bearer Token]
+    CheckAuthType -->|mtls| CheckCert[Validate Client TLS Cert & SAN URIs]
+    CheckAuthType -->|both| HasBearer{Bearer Token Provided?}
+    HasBearer -->|Yes| CheckBearer
+    HasBearer -->|No| CheckCert
+    CheckBearer -->|Valid Token| AuthSuccess[Connection Authorized]
+    CheckBearer -->|Invalid / Missing| Reject401[401 Unauthorized]
+    CheckCert -->|Valid Cert & URIs Match| AuthSuccess
+    CheckCert -->|No Cert Presented| Reject401
+    CheckCert -->|URI Denied / Insufficient Mode| Reject403[403 Forbidden]
+```
+
+### Authentication Modes (`authtype`)
+
+The authentication mode for WebSocket connections is configured via the `authtype` (or `auth_type`) setting in `wsbroker.toml`:
+
+| Mode | Value | Description |
+| :--- | :--- | :--- |
+| **Bearer** | `authtype = "bearer"` | *(Default)* Authenticates WebSocket connections using a Bearer token supplied via the `Authorization: Bearer <token>` header or `token` / `bearer` URL query parameters. Client certificates are not required. |
+| **mTLS** | `authtype = "mtls"` | Requires connecting WebSocket clients to present a valid X.509 TLS client certificate signed by a trusted CA. Validates Subject Alternative Name (SAN) URIs in the certificate for fine-grained client name and channel permissions. |
+| **Both** | `authtype = "both"` | Dual authentication mode allowing legacy token-based and mTLS certificate clients to coexist: <br>1. If a Bearer token is provided, it is validated against the configured secret. If invalid, the connection is immediately rejected (`401 Unauthorized`). <br>2. If no Bearer token is provided, the server requires a valid mTLS client certificate and validates SAN URI permissions. |
+
+---
+
+### Client Certificate SAN URIs
+
+When mTLS is active (`authtype = "mtls"` or fallback in `both`), WSBroker inspects the **Subject Alternative Name (SAN)** URIs embedded in the client's X.509 certificate to enforce granular authorization.
+
+All permission URIs follow the `wsbroker:` URI scheme:
+
+#### 1. Client Identity URIs (`wsbroker:client:<clientname>`)
+Restricts the client identifier(s) that the certificate holder is allowed to claim when connecting.
+
+- **Syntax:** `wsbroker:client:<clientname>` (also accepts `wsbroker://client:<clientname>`)
+- **Exact match:** `wsbroker:client:sensor-device-01` allows connection only as client `sensor-device-01`.
+- **Wildcard:** `wsbroker:client:*` permits any client identifier.
+- **Multiple URIs:** A certificate can contain multiple client URIs (e.g. `wsbroker:client:service-a` and `wsbroker:client:service-b`).
+- **Unrestricted:** If no `wsbroker:client:...` URI is present in the certificate, client name restriction is disabled (the certificate may connect under any name).
+
+#### 2. Channel Access & Mode URIs (`wsbroker:channel:<channelname>:<mode>`)
+Restricts which channels the client may subscribe to and what operations it may perform.
+
+- **Syntax:** `wsbroker:channel:<channelname>:<mode>` (also accepts `wsbroker://channel:<channelname>:<mode>`)
+- **Channel Name:** The specific channel name or wildcard `*` for all channels.
+- **Mode:** One of `ro` (Read-Only), `wo` (Write-Only), or `rw` (Read-Write).
+- **Examples:**
+  - `wsbroker:channel:telemetry:rw` &mdash; Full read/write access to the `telemetry` channel.
+  - `wsbroker:channel:alerts:ro` &mdash; Read-only subscription to the `alerts` channel.
+  - `wsbroker:channel:metrics:wo` &mdash; Ingest / write-only publishing to the `metrics` channel.
+  - `wsbroker:channel:*:ro` &mdash; Read-only subscription to any channel across the broker.
+- **Multiple / Combined URIs:** If multiple URIs exist for the same channel, their permissions are merged to the most permissive mode (e.g., `ro` combined with `wo` yields `rw`).
+- **Unrestricted:** If no `wsbroker:channel:...` URI is present in the certificate, channel access restriction is disabled (the client can access any channel in any mode).
+
+---
+
+### Access Mode Hierarchy & Enforcement
+
+WSBroker enforces a strict permission hierarchy between the mode granted in the certificate and the mode requested by the client:
+
+| Certificate Granted Mode | Requested `rw` | Requested `ro` | Requested `wo` / `w` |
+| :---: | :---: | :---: | :---: |
+| **`rw`** | Allowed | Allowed | Allowed |
+| **`ro`** | Denied (`403`) | Allowed | Denied (`403`) |
+| **`wo`** | Denied (`403`) | Denied (`403`) | Allowed |
+
+#### Enforcement Points
+1. **Initial WebSocket Handshake:**
+   - `/ws/:name/:mode`: Checks that `:name` is authorized by client URIs and that any initial channels in query parameters (`?channel=...` or `?channels=...`) are authorized for `:mode`.
+   - `/ws/channel/:channel/:mode`: Checks that `:channel` is authorized for `:mode` and that the assigned client name is authorized.
+2. **Runtime Channel Attachments (`TypeAttach`):**
+   - When an active client sends an `attach` event (`{"type": "attach", "target": "restricted-channel"}`), WSBroker verifies that the certificate authorizes access to `restricted-channel` in the connection's established mode. Unauthorized attachments are rejected with a warning log.
+
+---
+
+### REST API & Dashboard Security
+
+- **REST API (`/api/v1/*`):** Protected by the shared `bearer` token secret configured in `wsbroker.toml`. Requests must supply `Authorization: Bearer <token>` or `?token=<token>`.
+- **Web Dashboard (`/dashboard`):**
+  - **Basic Authentication:** Protected by `username` and `password` defined under `[dashboard]`.
+  - **Bearer Token Fallback:** Enabled when `allow_bearer = true` under `[dashboard]`.
+  - **CSRF Protection:** State-modifying HTTP requests (`POST`, `DELETE`) require matching `Origin` or `Referer` headers matching the server host.
+  - **Security Headers:** Strict `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: same-origin`.
+
+---
+
+### Client Certificate Configuration Example
+
+To generate an X.509 client certificate with `wsbroker` SAN URIs using OpenSSL, include the URIs under `subjectAltName` in your OpenSSL configuration:
+
+```ini
+[ req ]
+distinguished_name = req_distinguished_name
+req_extensions     = req_ext
+prompt             = no
+
+[ req_distinguished_name ]
+CN = sensor-node-01
+O  = IoT Fleet
+
+[ req_ext ]
+subjectAltName = @alt_names
+
+[ alt_names ]
+URI.1 = wsbroker:client:sensor-node-01
+URI.2 = wsbroker:channel:telemetry:rw
+URI.3 = wsbroker:channel:alerts:ro
+```
+
+---
+
 ## WebSocket API
 
 ### Connection Endpoints
@@ -275,18 +401,18 @@ http://localhost:8080/dashboard
 ```mermaid
 graph LR
     subgraph Dashboard UI
-        A[Stats Summary Banner]
-        B[Active Connections Table]
-        C[Active Channels Grid]
-        D[Publish Message Form]
+        A["Stats Summary Banner"]
+        B["Active Connections Table"]
+        C["Active Channels Grid"]
+        D["Publish Message Form"]
     end
 
     subgraph HTMX Polling & Actions
-        A -->|hx-get every 3s| S1[/dashboard/stats]
-        B -->|hx-get every 3s| S2[/dashboard/connections]
-        B -->|hx-delete| S3[/dashboard/connections/:name]
-        C -->|hx-get every 3s| S4[/dashboard/channels]
-        D -->|hx-post| S5[/dashboard/publish]
+        A -->|hx-get every 3s| S1["/dashboard/stats"]
+        B -->|hx-get every 3s| S2["/dashboard/connections"]
+        B -->|hx-delete| S3["/dashboard/connections/:name"]
+        C -->|hx-get every 3s| S4["/dashboard/channels"]
+        D -->|hx-post| S5["/dashboard/publish"]
     end
 ```
 
@@ -308,8 +434,11 @@ localaddr = "0.0.0.0:8080"
 # External address advertised to clients and Swagger UI
 externaladdr = "http://localhost:8080"
 
-# Bearer authentication token (optional)
+# Bearer authentication token for REST API and WebSocket (optional)
 bearer = "secret-token"
+
+# Authentication mode for WebSocket connections: "bearer" | "mtls" | "both" (default: "bearer")
+authtype = "bearer"
 
 # Number of parallel worker goroutines for event dispatching (0 = NumCPU)
 num_workers = 8
@@ -317,12 +446,21 @@ num_workers = 8
 # Enable debug logging
 debug = false
 
+[dashboard]
+# Enable embedded HTMX web dashboard (default: false)
+enabled = true
+# Basic authentication credentials for dashboard access
+username = "admin"
+password = "supersecretpassword"
+# Allow Bearer token authentication fallback for dashboard endpoints
+allow_bearer = true
+
 [log]
 level = "debug"
 file = ""
 
 [resttls]
-# TLS configuration (empty type = plain HTTP)
+# TLS configuration (empty type = plain HTTP, "DEV" = self-signed dev certs, "TLS" = file-based)
 type = ""
 ```
 
@@ -338,7 +476,7 @@ Configuration files are searched in the following order:
 ## Getting Started
 
 ### Prerequisites
-- [Go 1.22+](https://golang.org/dl/) installed.
+- [Go 1.27+](https://golang.org/dl/) installed.
 
 ### Installation & Build
 

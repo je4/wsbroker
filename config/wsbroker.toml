@@ -1,6 +1,7 @@
 localaddr = "localhost:8765"
 externaladdr = "https://localhost:8765"
 bearer = "%%BEARER%%"
+authtype = "bearer"
 num_workers = 10
 debug = false
 

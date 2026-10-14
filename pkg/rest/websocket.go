@@ -26,6 +26,56 @@ func getCertPermissions(c *gin.Context) *broker.CertPermissions {
 	return nil
 }
 
+func (ctrl *controller) authenticateWS(c *gin.Context) (*broker.CertPermissions, bool) {
+	switch ctrl.GetAuthType() {
+	case AuthTypeMTLS:
+		if c.Request.TLS == nil || len(c.Request.TLS.PeerCertificates) == 0 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
+				Code:    http.StatusUnauthorized,
+				Message: "client certificate required",
+			})
+			return nil, false
+		}
+		return getCertPermissions(c), true
+
+	case AuthTypeBoth:
+		token, hasToken := ctrl.extractBearerToken(c)
+		if hasToken {
+			if !ctrl.validateBearerToken(token) {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
+					Code:    http.StatusUnauthorized,
+					Message: "invalid bearer token",
+				})
+				return nil, false
+			}
+			return getCertPermissions(c), true
+		}
+		if c.Request.TLS == nil || len(c.Request.TLS.PeerCertificates) == 0 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
+				Code:    http.StatusUnauthorized,
+				Message: "client certificate or bearer token required",
+			})
+			return nil, false
+		}
+		return getCertPermissions(c), true
+
+	case AuthTypeBearer:
+		fallthrough
+	default:
+		if len(ctrl.bearer) > 0 {
+			token, hasToken := ctrl.extractBearerToken(c)
+			if !hasToken || !ctrl.validateBearerToken(token) {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
+					Code:    http.StatusUnauthorized,
+					Message: "invalid bearer token",
+				})
+				return nil, false
+			}
+		}
+		return getCertPermissions(c), true
+	}
+}
+
 func getRequestedChannels(c *gin.Context, initialChannels ...string) []string {
 	var channels []string
 	for _, ch := range initialChannels {
@@ -50,7 +100,8 @@ func getRequestedChannels(c *gin.Context, initialChannels ...string) []string {
 }
 
 func (ctrl *controller) wsHandler(c *gin.Context) {
-	if !ctrl.checkBearer(c) {
+	certPerms, ok := ctrl.authenticateWS(c)
+	if !ok {
 		return
 	}
 
@@ -73,7 +124,6 @@ func (ctrl *controller) wsHandler(c *gin.Context) {
 		return
 	}
 
-	certPerms := getCertPermissions(c)
 	if certPerms != nil && certPerms.HasRestrictions() {
 		if !certPerms.CanAccessClient(name) {
 			c.AbortWithStatusJSON(http.StatusForbidden, HTTPResultMessage{
@@ -108,7 +158,8 @@ func (ctrl *controller) wsHandler(c *gin.Context) {
 }
 
 func (ctrl *controller) wsChannelHandler(c *gin.Context) {
-	if !ctrl.checkBearer(c) {
+	certPerms, ok := ctrl.authenticateWS(c)
+	if !ok {
 		return
 	}
 
@@ -141,7 +192,6 @@ func (ctrl *controller) wsChannelHandler(c *gin.Context) {
 		clientName = fmt.Sprintf("client-%s", hex.EncodeToString(b))
 	}
 
-	certPerms := getCertPermissions(c)
 	if certPerms != nil && certPerms.HasRestrictions() {
 		if !certPerms.CanAccessChannel(channel, mode) {
 			c.AbortWithStatusJSON(http.StatusForbidden, HTTPResultMessage{

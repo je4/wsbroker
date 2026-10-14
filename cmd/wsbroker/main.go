@@ -93,6 +93,9 @@ func main() {
 				logger.Error().Err(err).Msg("error closing rest loader")
 			}
 		}(restLoader)
+		if restTLSConfig != nil {
+			restTLSConfig.ClientAuth = tls.VerifyClientCertIfGiven
+		}
 	}
 
 	dashboardEnabled := *dashboard || conf.Dashboard.Enabled
@@ -108,6 +111,7 @@ func main() {
 	if err != nil {
 		logger.Fatal().Msgf("cannot create controller: %v", err)
 	}
+	ctrl.SetAuthType(conf.AuthType)
 	ctrl.SetDashboardAuth(conf.Dashboard.Username.String(), conf.Dashboard.Password.String(), conf.Dashboard.AllowBearer)
 	ctrl.SetNumWorkers(conf.NumWorkers)
 	ctrl.SetDebug(conf.Debug)

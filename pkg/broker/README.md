@@ -11,6 +11,7 @@ The `broker` package manages WebSocket connections, thread-safe group/channel me
   - Registered WebSocket connections (`wsConns: map[string]*Connection`).
   - Channel subscription lists (`groups: map[string][]string`).
   - Asynchronous worker dispatch queue (`senderChannel: chan *job`).
+- **`CertPermissions`**: Represents authorized client identifiers and channel access permissions extracted from X.509 Subject Alternative Name (SAN) URIs. Evaluates runtime permissions against requested connection modes.
 
 ---
 
@@ -78,6 +79,24 @@ flowchart LR
     W2 --> S2[Connection.WriteJSON]
     WN --> SN[Connection.WriteJSON]
 ```
+
+---
+
+## Certificate SAN URI Permissions (`CertPermissions`)
+
+The `broker` package parses Subject Alternative Name (SAN) URIs from client X.509 certificates to determine authorized client identifiers and channel access modes.
+
+### URI Schemas
+- **Client Identity:** `wsbroker:client:<clientname>` (e.g. `wsbroker:client:sensor-1`, or wildcard `wsbroker:client:*`).
+- **Channel Access:** `wsbroker:channel:<channelname>:<mode>` where `<mode>` is `ro`, `wo`, or `rw` (e.g. `wsbroker:channel:alerts:ro`, `wsbroker:channel:telemetry:rw`, or wildcard `wsbroker:channel:*:ro`).
+
+### Permission & Mode Evaluation
+- `ParseCertPermissions(cert *x509.Certificate) *CertPermissions`: Extracts and indexes client names and channel permissions from certificate SAN URIs.
+- `CanAccessClient(clientName string) bool`: Returns `true` if the certificate allows the given client name (or if no client restrictions exist).
+- `CanAccessChannel(channelName string, requestedMode ConnectionMode) bool`: Verifies whether granted channel permissions satisfy the requested mode:
+  - `rw` grants requested `rw`, `ro`, and `wo`.
+  - `ro` grants requested `ro` only.
+  - `wo` grants requested `wo` only.
 
 ---
 

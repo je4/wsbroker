@@ -13,7 +13,7 @@ require (
 	github.com/rs/zerolog v1.35.1
 	github.com/swaggo/swag/v2 v2.0.0-rc6
 	gitlab.switch.ch/ub-unibas/go-ublogger/v2 v2.0.1
-	go.ub.unibas.ch/cloud/certloader/v2 v2.0.25
+	go.ub.unibas.ch/cloud/certloader/v2 v2.0.26
 	go.ub.unibas.ch/cloud/swaggerui v0.0.0-20261002124323-79cb1c8a550a
 )
 

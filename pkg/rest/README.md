@@ -60,42 +60,40 @@ graph TB
 ## WebSocket Session Loop
 
 Each incoming WebSocket connection undergoes:
-1. **Bearer Token Check:** (if configured).
-2. **Upgrade:** `websocket.Accept(c.Writer, c.Request, ...)`
-3. **Registration:** `broker.AddWSConn(conn)` & channel attachments from query parameters.
-4. **Read Loop Goroutine:** Consumes incoming `attach`, `detach`, `message`, and `pong` events.
-5. **Keepalive Ticker:** Sends periodic `ping` events every 20 seconds.
-6. **Graceful Teardown:** Cleanup on disconnection or context cancellation.
+1. **Authentication (`authenticateWS`):**
+   - Mode `bearer`: Validates Bearer token from header or query parameters.
+   - Mode `mtls`: Requires client TLS certificate (`PeerCertificates`), extracts SAN URIs via `ParseCertPermissions`.
+   - Mode `both`: Checks Bearer token first; if omitted, falls back to mTLS certificate verification.
+2. **Authorization & Restrictions Check:**
+   - Client name authorization (`wsbroker:client:...`).
+   - Channel access & mode authorization (`wsbroker:channel:...:...`).
+3. **Upgrade:** `websocket.Accept(c.Writer, c.Request, ...)`
+4. **Registration:** `broker.AddWSConn(conn)` & channel attachments from query parameters.
+5. **Read Loop Goroutine:** Consumes incoming events:
+   - `attach`: Verifies certificate channel permissions before attaching client to group.
+   - `detach`: Removes client from group.
+   - `message`: Dispatches event to broker if connection mode allows write access.
+   - `ping` / `pong`: Handles heartbeats.
+6. **Keepalive Ticker:** Sends periodic `ping` events every 20 seconds.
+7. **Graceful Teardown:** Cleanup on disconnection or context cancellation.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Client
-    participant Rest as controller.wsHandler
-    participant CM as ConnectionManager
+---
 
-    Client->>Rest: HTTP Upgrade Request
-    Rest->>Rest: websocket.Accept()
-    Rest->>CM: AddWSConn() & AddToGroup()
-    par Read Loop
-        loop Every Message
-            Client->>Rest: wsjson.Read()
-            alt event.Type == "attach"
-                Rest->>CM: AddToGroup(client, target)
-            else event.Type == "detach"
-                Rest->>CM: RemoveFromGroup(client, target)
-            else event.Type == "message"
-                Rest->>CM: Send(event)
-            end
-        end
-    and Keepalive Loop
-        loop Every 20s
-            Rest->>Client: Send {"type":"ping"}
-        end
-    end
-    Client->>Rest: Disconnect
-    Rest->>CM: CloseWSConn()
-```
+## Authentication & Security Architecture
+
+The `rest` package enforces authentication across all surfaces:
+
+### 1. WebSocket Authentication (`authenticateWS`)
+- **`AuthTypeBearer` ("bearer"):** Requires a valid Bearer token (`Authorization: Bearer <token>`, `?token=...`, or `?bearer=...`).
+- **`AuthTypeMTLS` ("mtls"):** Requires client certificate presenting valid SAN URIs (`wsbroker:client:<name>` and `wsbroker:channel:<channel>:<mode>`).
+- **`AuthTypeBoth` ("both"):** Validates Bearer token if present; otherwise requires client TLS certificate with SAN URIs.
+
+### 2. REST API Middleware (`checkBearer`)
+Protects all management and publishing endpoints (`/api/v1/*`) using constant-time token verification.
+
+### 3. Dashboard Middleware
+- **`dashboardAuthMiddleware`:** Enforces HTTP Basic Auth (`username` / `password`) with optional Bearer fallback (`allow_bearer`).
+- **`dashboardSecurityMiddleware`:** Injects security headers (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, CSP) and enforces Origin / Referer validation against CSRF on mutating requests.
 
 ---
 

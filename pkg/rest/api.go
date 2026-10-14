@@ -27,6 +27,15 @@ import (
 // BASEPATH defines the base URL prefix for version 1 of the WSBroker REST API.
 const BASEPATH = "/api/v1"
 
+// AuthType represents the authentication mode for WebSocket connections.
+type AuthType string
+
+const (
+	AuthTypeBearer AuthType = "bearer"
+	AuthTypeMTLS   AuthType = "mtls"
+	AuthTypeBoth   AuthType = "both"
+)
+
 //	@title			WSBroker API
 //	@version		1.0
 //	@description	WSBroker API
@@ -71,6 +80,7 @@ func NewController(addr, extAddr string, tlsConfig *tls.Config, bearer string, d
 		subpath:    subpath,
 		logger:     logger,
 		bearer:     bearer,
+		authType:   AuthTypeBearer,
 		broker:     broker.NewConnectionManager(false, logger),
 		numWorkers: runtime.NumCPU(),
 		debug:      false,
@@ -89,12 +99,32 @@ type controller struct {
 	subpath              string
 	logger               zLogger.ZLogger
 	bearer               string
+	authType             AuthType
 	dashboardUser        string
 	dashboardPass        string
 	allowDashboardBearer bool
 	broker               *broker.ConnectionManager
 	numWorkers           int
 	debug                bool
+}
+
+// SetAuthType sets and normalizes the authentication type ("bearer", "mtls", "both").
+func (ctrl *controller) SetAuthType(authType string) {
+	norm := strings.ToLower(strings.TrimSpace(authType))
+	switch AuthType(norm) {
+	case AuthTypeBearer, AuthTypeMTLS, AuthTypeBoth:
+		ctrl.authType = AuthType(norm)
+	default:
+		ctrl.authType = AuthTypeBearer
+	}
+}
+
+// GetAuthType returns the configured AuthType.
+func (ctrl *controller) GetAuthType() AuthType {
+	if ctrl.authType == "" {
+		return AuthTypeBearer
+	}
+	return ctrl.authType
 }
 
 // SetDashboardAuth configures the HTTP Basic Auth credentials and optional bearer token fallback for dashboard access.

@@ -11,20 +11,36 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func (ctrl *controller) extractBearerToken(c *gin.Context) (string, bool) {
+	authHeader := c.Request.Header.Get("Authorization")
+	if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
+		return strings.TrimSpace(after), true
+	}
+	if qToken, ok := c.GetQuery("token"); ok {
+		return strings.TrimSpace(qToken), true
+	}
+	if qBearer, ok := c.GetQuery("bearer"); ok {
+		return strings.TrimSpace(qBearer), true
+	}
+	return "", false
+}
+
+func (ctrl *controller) validateBearerToken(token string) bool {
+	if len(ctrl.bearer) == 0 {
+		return true
+	}
+	if token == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(token), []byte(ctrl.bearer)) == 1
+}
+
 func (ctrl *controller) checkBearer(c *gin.Context) bool {
 	if len(ctrl.bearer) == 0 {
 		return true
 	}
-	authHeader := c.Request.Header.Get("Authorization")
-	token := ""
-	if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
-		token = after
-	} else if qToken := c.Query("token"); qToken != "" {
-		token = qToken
-	} else if qBearer := c.Query("bearer"); qBearer != "" {
-		token = qBearer
-	}
-	if subtle.ConstantTimeCompare([]byte(token), []byte(ctrl.bearer)) != 1 {
+	token, hasToken := ctrl.extractBearerToken(c)
+	if !hasToken || !ctrl.validateBearerToken(token) {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
 			Code:    http.StatusUnauthorized,
 			Message: "invalid bearer token",
@@ -38,19 +54,11 @@ func (ctrl *controller) checkBearerSilent(c *gin.Context) bool {
 	if len(ctrl.bearer) == 0 {
 		return false
 	}
-	authHeader := c.Request.Header.Get("Authorization")
-	token := ""
-	if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
-		token = after
-	} else if qToken := c.Query("token"); qToken != "" {
-		token = qToken
-	} else if qBearer := c.Query("bearer"); qBearer != "" {
-		token = qBearer
-	}
-	if token == "" {
+	token, hasToken := ctrl.extractBearerToken(c)
+	if !hasToken {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(token), []byte(ctrl.bearer)) == 1
+	return ctrl.validateBearerToken(token)
 }
 
 func (ctrl *controller) dashboardSecurityMiddleware() gin.HandlerFunc {
