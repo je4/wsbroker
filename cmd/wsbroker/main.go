@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/je4/utils/v2/pkg/zLogger"
 	"github.com/je4/wsbroker/pkg/rest"
@@ -115,6 +116,9 @@ func main() {
 	ctrl.SetDashboardAuth(conf.Dashboard.Username.String(), conf.Dashboard.Password.String(), conf.Dashboard.AllowBearer)
 	ctrl.SetNumWorkers(conf.NumWorkers)
 	ctrl.SetDebug(conf.Debug)
+	if conf.NTPServer != "" {
+		ctrl.SetNTPServer(conf.NTPServer, time.Duration(conf.NTPTimeout))
+	}
 	var wg = &sync.WaitGroup{}
 	ctrl.Start(wg)
 

@@ -34,6 +34,8 @@ type WSBrokerConfig struct {
 	Log          stashconfig.Config `toml:"log"`
 	AuthType     string             `toml:"authtype"`
 	AuthTypeAlt  string             `toml:"auth_type"`
+	NTPServer    string             `toml:"ntp_server"`
+	NTPTimeout   config.Duration    `toml:"ntp_timeout"`
 }
 
 var configdirs = []string{"~/.wsbroker.toml", "/etc/wsbroker.toml", "/opt/wsbroker/wsbroker.toml"}

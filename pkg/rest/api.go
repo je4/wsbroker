@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"emperror.dev/errors"
 	"github.com/gin-contrib/cors"
@@ -106,6 +107,25 @@ type controller struct {
 	broker               *broker.ConnectionManager
 	numWorkers           int
 	debug                bool
+	ntpServer            string
+	ntpTimeout           time.Duration
+	ntpFunc              NTPForwarder
+}
+
+// SetNTPServer configures the remote NTP server address and timeout for raw NTP packet forwarding.
+func (ctrl *controller) SetNTPServer(server string, timeout time.Duration) {
+	ctrl.ntpServer = server
+	ctrl.ntpTimeout = timeout
+	if server != "" {
+		ctrl.ntpFunc = NewNTPConnection(server, "udp", "123", "", 0, timeout)
+	} else {
+		ctrl.ntpFunc = nil
+	}
+}
+
+// SetNTPForwarder configures a custom NTP forwarding function (useful for tests or custom forwarders).
+func (ctrl *controller) SetNTPForwarder(forwarder NTPForwarder) {
+	ctrl.ntpFunc = forwarder
 }
 
 // SetAuthType sets and normalizes the authentication type ("bearer", "mtls", "both").
@@ -149,6 +169,11 @@ func (ctrl *controller) SetDebug(debug bool) {
 // GetBroker returns the underlying broker ConnectionManager instance.
 func (ctrl *controller) GetBroker() *broker.ConnectionManager {
 	return ctrl.broker
+}
+
+// GetRouter returns the underlying Gin Engine instance.
+func (ctrl *controller) GetRouter() *gin.Engine {
+	return ctrl.router
 }
 
 // Init configures middleware, REST endpoints, WebSocket routes, Swagger UI, and the HTTP server.

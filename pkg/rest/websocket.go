@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -341,6 +342,76 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 				Target: name,
 				Data:   evt.Data,
 			})
+		case event.TypeNTPQuery:
+			ctrl.logger.Debug().Msgf("Received NTP query from %s: %s", evt.GetSource(), evt.Data)
+			if name != evt.GetSource() {
+				ctrl.logger.Error().Msgf("ntp event for %s on %s not allowed", evt.GetSource(), name)
+				jsonBytes, _ := json.Marshal(fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name))
+				_ = ctrl.broker.Send(&event.Event{
+					Type:   event.TypeNTPError,
+					Source: "wsbroker",
+					Target: name,
+					Data:   jsonBytes,
+				})
+				continue
+			}
+			if ctrl.ntpFunc == nil {
+				ctrl.logger.Error().Msg("NTP server not configured")
+				jsonBytes, _ := json.Marshal("ntp service not configured")
+				_ = ctrl.broker.Send(&event.Event{
+					Type:   event.TypeNTPError,
+					Source: "wsbroker",
+					Target: name,
+					Data:   jsonBytes,
+				})
+				continue
+			}
+			data, err := evt.GetData()
+			if err != nil {
+				ctrl.logger.Error().Err(err).Msg("Failed to get raw ntp data")
+				jsonBytes, _ := json.Marshal(err.Error())
+				_ = ctrl.broker.Send(&event.Event{
+					Type:   event.TypeNTPError,
+					Source: "wsbroker",
+					Target: name,
+					Data:   jsonBytes,
+				})
+				continue
+			}
+			raw, ok := data.([]byte)
+			if !ok {
+				ctrl.logger.Error().Msg("NTP query data is not raw bytes")
+				jsonBytes, _ := json.Marshal("ntp query data must be raw bytes")
+				_ = ctrl.broker.Send(&event.Event{
+					Type:   event.TypeNTPError,
+					Source: "wsbroker",
+					Target: name,
+					Data:   jsonBytes,
+				})
+				continue
+			}
+			result, err := ctrl.ntpFunc(raw)
+			if err != nil {
+				ctrl.logger.Error().Err(err).Msg("Failed to query ntp server")
+				jsonBytes, _ := json.Marshal(err.Error())
+				_ = ctrl.broker.Send(&event.Event{
+					Type:   event.TypeNTPError,
+					Source: "wsbroker",
+					Target: name,
+					Data:   jsonBytes,
+				})
+				continue
+			}
+			jsonBytes, _ := json.Marshal(result)
+			ctrl.logger.Debug().Msgf("Sending ntp response to %s: %d bytes", evt.GetSource(), len(result))
+			if err := ctrl.broker.Send(&event.Event{
+				Type:   event.TypeNTPResponse,
+				Source: "wsbroker",
+				Target: name,
+				Data:   jsonBytes,
+			}); err != nil {
+				ctrl.logger.Error().Err(err).Msg("Failed to send NTP response")
+			}
 		default:
 			if !mode.CanWrite() {
 				ctrl.logger.Warn().Msgf("read-only client %s attempted to send event type %s, dropping", name, evt.Type)

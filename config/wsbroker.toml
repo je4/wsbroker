@@ -4,6 +4,8 @@ bearer = "%%BEARER%%"
 authtype = "bearer"
 num_workers = 10
 debug = false
+ntp_server = "pool.ntp.org:123"
+ntp_timeout = "5s"
 
 [dashboard]
 enabled = false
