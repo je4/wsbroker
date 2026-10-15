@@ -3,7 +3,7 @@ package rest
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -82,7 +82,9 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 			t.Fatalf("expected 200 from /channels, got %d", resp.StatusCode)
 		}
 		var counts map[string]int
-		json.NewDecoder(resp.Body).Decode(&counts)
+		if err := json.UnmarshalRead(resp.Body, &counts); err != nil {
+			t.Fatalf("failed to decode counts: %v", err)
+		}
 		resp.Body.Close()
 
 		if counts["room1"] != 3 {
@@ -102,7 +104,9 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 			t.Fatalf("expected 200, got %d", resp.StatusCode)
 		}
 		var members []string
-		json.NewDecoder(resp.Body).Decode(&members)
+		if err := json.UnmarshalRead(resp.Body, &members); err != nil {
+			t.Fatalf("failed to decode members: %v", err)
+		}
 		resp.Body.Close()
 
 		if len(members) != 3 {

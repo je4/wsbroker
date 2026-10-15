@@ -3,7 +3,7 @@
 package rest
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 
@@ -53,7 +53,7 @@ func (ctrl *controller) publish(c *gin.Context) {
 		req.Type = string(event.TypeMessage)
 	}
 
-	var data json.RawMessage
+	var data []byte
 	if len(req.Data) > 0 {
 		data = req.Data
 	} else if req.Message != "" {
@@ -119,7 +119,7 @@ func (ctrl *controller) publishChannel(c *gin.Context) {
 		req.Type = string(event.TypeMessage)
 	}
 
-	var data json.RawMessage
+	var data []byte
 	if len(req.Data) > 0 {
 		data = req.Data
 	} else if req.Message != "" {

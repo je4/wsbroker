@@ -6,7 +6,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"crypto/tls"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net"
 	"net/http"

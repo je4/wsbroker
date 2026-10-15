@@ -2,16 +2,16 @@
 // and the interactive HTML dashboard for WSBroker.
 package rest
 
-import "encoding/json"
+import "encoding/json/jsontext"
 
 // PublishRequest defines the JSON payload for publishing messages via REST API endpoints.
 type PublishRequest struct {
-	Source  string          `json:"source" example:"publisher-1"`
-	Target  string          `json:"target,omitempty" example:"alerts"`
-	Type    string          `json:"type" example:"message"`
-	Token   string          `json:"token,omitempty"`
-	Data    json.RawMessage `json:"data,omitempty" swaggertype:"primitive,string" example:"{\"text\":\"hello world\"}"`
-	Message string          `json:"message,omitempty" example:"hello world"`
+	Source  string         `json:"source" example:"publisher-1"`
+	Target  string         `json:"target,omitempty" example:"alerts"`
+	Type    string         `json:"type" example:"message"`
+	Token   string         `json:"token,omitempty"`
+	Data    jsontext.Value `json:"data,omitempty" swaggertype:"primitive,string" example:"{\"text\":\"hello world\"}"`
+	Message string         `json:"message,omitempty" example:"hello world"`
 }
 
 // PublishResponse defines the JSON response returned after a message is dispatched.

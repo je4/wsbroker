@@ -5,7 +5,8 @@ package rest
 import (
 	"bytes"
 	_ "embed"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -166,10 +167,10 @@ func (ctrl *controller) dashboardPublishHandler(c *gin.Context) {
 		source = "dashboard"
 	}
 
-	var data json.RawMessage
+	var data []byte
 	if strings.HasPrefix(message, "{") || strings.HasPrefix(message, "[") {
-		if json.Valid([]byte(message)) {
-			data = json.RawMessage(message)
+		if jsontext.Value(message).IsValid() {
+			data = []byte(message)
 		}
 	}
 	if len(data) == 0 {
