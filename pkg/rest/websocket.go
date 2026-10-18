@@ -300,6 +300,20 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 
 		if evt.Source == "" {
 			evt.Source = name
+		} else if evt.Source != name && name != "dashboard" {
+			if evt.Type == event.TypeNTPQuery {
+				ctrl.logger.Error().Msgf("ntp event for %s on %s not allowed", evt.GetSource(), name)
+				jsonBytes, _ := json.Marshal(fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name))
+				_ = ctrl.broker.Send(&event.Event{
+					Type:   event.TypeNTPError,
+					Source: "wsbroker",
+					Target: name,
+					Data:   jsonBytes,
+				})
+			} else {
+				ctrl.logger.Warn().Msgf("client %s attempted to send event with invalid source %s, dropping", name, evt.Source)
+			}
+			continue
 		}
 
 		ctrl.logger.Debug().Msgf("client %s received event: %s", name, evt.String())
@@ -344,7 +358,7 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 			})
 		case event.TypeNTPQuery:
 			ctrl.logger.Debug().Msgf("Received NTP query from %s: %s", evt.GetSource(), evt.Data)
-			if name != evt.GetSource() {
+			if name != evt.GetSource() && name != "dashboard" {
 				ctrl.logger.Error().Msgf("ntp event for %s on %s not allowed", evt.GetSource(), name)
 				jsonBytes, _ := json.Marshal(fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name))
 				_ = ctrl.broker.Send(&event.Event{

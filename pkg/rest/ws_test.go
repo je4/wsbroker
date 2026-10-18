@@ -469,3 +469,129 @@ func TestWebSocketModes_InvalidAndMissingMode(t *testing.T) {
 		t.Errorf("expected status 400 Bad Request for invalid mode on channel, got %d", resp.StatusCode)
 	}
 }
+
+func TestWebSocket_SourceValidation(t *testing.T) {
+	logger := zerolog.Nop()
+	bearer := "test-secret"
+
+	ctrl, err := NewController(":0", "http://localhost:8765", nil, bearer, true, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+
+	ctrl.broker.Start(4)
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewServer(ctrl.router)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Connect sender client1
+	cSender, _, err := websocket.Dial(ctx, wsURL+"/ws/client1/rw?channel=testchan&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("cSender dial failed: %v", err)
+	}
+	defer cSender.Close(websocket.StatusNormalClosure, "")
+
+	// Connect receiver client2
+	cReceiver, _, err := websocket.Dial(ctx, wsURL+"/ws/client2/rw?channel=testchan&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("cReceiver dial failed: %v", err)
+	}
+	defer cReceiver.Close(websocket.StatusNormalClosure, "")
+
+	received := make(chan *event.Event, 10)
+	go func() {
+		for {
+			var evt event.Event
+			if err := wsjson.Read(ctx, cReceiver, &evt); err != nil {
+				return
+			}
+			received <- &evt
+		}
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Case 1: Empty Source -> Fallback to client name ("client1")
+	emptySrcEvt, _ := event.NewMessageEvent("", "testchan", "msg-fallback")
+	if err := wsjson.Write(ctx, cSender, emptySrcEvt); err != nil {
+		t.Fatalf("failed to write empty source event: %v", err)
+	}
+
+	select {
+	case evt := <-received:
+		if evt.Source != "client1" {
+			t.Errorf("expected source 'client1' from fallback, got %q", evt.Source)
+		}
+		d, _ := evt.GetData()
+		if d != "msg-fallback" {
+			t.Errorf("expected payload 'msg-fallback', got %v", d)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatalf("timed out waiting for fallback source event")
+	}
+
+	// Case 2: Matching Source ("client1") -> Valid and accepted
+	validSrcEvt, _ := event.NewMessageEvent("client1", "testchan", "msg-valid")
+	if err := wsjson.Write(ctx, cSender, validSrcEvt); err != nil {
+		t.Fatalf("failed to write valid source event: %v", err)
+	}
+
+	select {
+	case evt := <-received:
+		if evt.Source != "client1" {
+			t.Errorf("expected source 'client1', got %q", evt.Source)
+		}
+		d, _ := evt.GetData()
+		if d != "msg-valid" {
+			t.Errorf("expected payload 'msg-valid', got %v", d)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatalf("timed out waiting for valid source event")
+	}
+
+	// Case 3: Mismatched/Spoofed Source ("spoofedClient") -> Dropped strictly
+	spoofedEvt, _ := event.NewMessageEvent("spoofedClient", "testchan", "msg-spoofed")
+	if err := wsjson.Write(ctx, cSender, spoofedEvt); err != nil {
+		t.Fatalf("failed to write spoofed event: %v", err)
+	}
+
+	select {
+	case evt := <-received:
+		t.Errorf("unexpected event received for spoofed source: %+v", evt)
+	case <-time.After(200 * time.Millisecond):
+		// Expected: event was dropped
+	}
+
+	// Case 4: Dashboard client ("dashboard") is allowed to specify any source
+	cDashboard, _, err := websocket.Dial(ctx, wsURL+"/ws/dashboard/rw?channel=testchan&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("cDashboard dial failed: %v", err)
+	}
+	defer cDashboard.Close(websocket.StatusNormalClosure, "")
+
+	time.Sleep(50 * time.Millisecond)
+
+	dashEvt, _ := event.NewMessageEvent("custom-dash-source", "testchan", "msg-from-dash")
+	if err := wsjson.Write(ctx, cDashboard, dashEvt); err != nil {
+		t.Fatalf("failed to write dashboard event: %v", err)
+	}
+
+	select {
+	case evt := <-received:
+		if evt.Source != "custom-dash-source" {
+			t.Errorf("expected source 'custom-dash-source' from dashboard, got %q", evt.Source)
+		}
+		d, _ := evt.GetData()
+		if d != "msg-from-dash" {
+			t.Errorf("expected payload 'msg-from-dash', got %v", d)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatalf("timed out waiting for dashboard event")
+	}
+}
