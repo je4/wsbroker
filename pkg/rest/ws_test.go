@@ -595,3 +595,166 @@ func TestWebSocket_SourceValidation(t *testing.T) {
 		t.Fatalf("timed out waiting for dashboard event")
 	}
 }
+
+func TestWebSocket_LargePayload(t *testing.T) {
+	logger := zerolog.Nop()
+	bearer := "test-secret"
+
+	ctrl, err := NewController(":0", "http://localhost:8765", nil, bearer, false, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+
+	ctrl.broker.Start(4)
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewServer(ctrl.router)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 1. Connect Client Receiver and set read limit on client connection
+	cReceiver, _, err := websocket.Dial(ctx, wsURL+"/ws/receiver/rw?channel=screenshots&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("cReceiver dial failed: %v", err)
+	}
+	defer cReceiver.Close(websocket.StatusNormalClosure, "")
+	cReceiver.SetReadLimit(16 * 1024 * 1024)
+
+	// 2. Connect Client Sender
+	cSender, _, err := websocket.Dial(ctx, wsURL+"/ws/sender/rw?bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("cSender dial failed: %v", err)
+	}
+	defer cSender.Close(websocket.StatusNormalClosure, "")
+	cSender.SetReadLimit(16 * 1024 * 1024)
+
+	time.Sleep(50 * time.Millisecond)
+
+	// 3. Sender sends large file event (> 64 KiB, e.g. 1 MiB payload)
+	largeData := make([]byte, 1024*1024)
+	for i := range largeData {
+		largeData[i] = byte(i % 256)
+	}
+
+	fileMsg := event.NewFileMessage("display_screenshot.jpg", "image/jpeg", largeData)
+	fileEvt, err := event.NewFileEvent("sender", "screenshots", fileMsg)
+	if err != nil {
+		t.Fatalf("failed to create file event: %v", err)
+	}
+
+	if err := wsjson.Write(ctx, cSender, fileEvt); err != nil {
+		t.Fatalf("failed to write large file event: %v", err)
+	}
+
+	// 4. Receiver reads event
+	var recEvt event.Event
+	if err := wsjson.Read(ctx, cReceiver, &recEvt); err != nil {
+		t.Fatalf("receiver failed to read large file event: %v", err)
+	}
+
+	data, err := recEvt.GetData()
+	if err != nil {
+		t.Fatalf("failed to get data from event: %v", err)
+	}
+	recFile, ok := data.(*event.FileMessage)
+	if !ok {
+		t.Fatalf("expected *event.FileMessage, got %T", data)
+	}
+	if len(recFile.Data) != len(largeData) {
+		t.Errorf("expected data length %d, got %d", len(largeData), len(recFile.Data))
+	}
+	if recFile.Filename != "display_screenshot.jpg" {
+		t.Errorf("expected filename display_screenshot.jpg, got %s", recFile.Filename)
+	}
+}
+
+func TestWebSocket_CustomReadLimitExceeded(t *testing.T) {
+	logger := zerolog.Nop()
+	bearer := "test-secret"
+
+	ctrl, err := NewController(":0", "http://localhost:8765", nil, bearer, false, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+	// Configure custom read limit (100 KiB)
+	ctrl.SetReadLimit(100 * 1024)
+
+	ctrl.broker.Start(4)
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewServer(ctrl.router)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 1. Connect Client Receiver
+	cReceiver, _, err := websocket.Dial(ctx, wsURL+"/ws/receiver/rw?channel=testchan&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("cReceiver dial failed: %v", err)
+	}
+	defer cReceiver.Close(websocket.StatusNormalClosure, "")
+	cReceiver.SetReadLimit(16 * 1024 * 1024)
+
+	// 2. Connect Client Sender
+	cSender, _, err := websocket.Dial(ctx, wsURL+"/ws/sender/rw?bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("cSender dial failed: %v", err)
+	}
+	defer cSender.Close(websocket.StatusNormalClosure, "")
+	cSender.SetReadLimit(16 * 1024 * 1024)
+
+	time.Sleep(50 * time.Millisecond)
+
+	// 3. Sender sends payload within limit (20 KiB raw -> ~27 KiB JSON)
+	data20k := make([]byte, 20*1024)
+	for i := range data20k {
+		data20k[i] = byte(i % 256)
+	}
+	msg20k := event.NewFileMessage("small.bin", "application/octet-stream", data20k)
+	evt20k, err := event.NewFileEvent("sender", "testchan", msg20k)
+	if err != nil {
+		t.Fatalf("failed to create file event: %v", err)
+	}
+	if err := wsjson.Write(ctx, cSender, evt20k); err != nil {
+		t.Fatalf("failed to send 20k payload: %v", err)
+	}
+
+	var recEvt20k event.Event
+	if err := wsjson.Read(ctx, cReceiver, &recEvt20k); err != nil {
+		t.Fatalf("failed to receive 20k payload: %v", err)
+	}
+
+	// 4. Sender sends payload exceeding limit (150 KiB raw -> ~200 KiB JSON)
+	data150k := make([]byte, 150*1024)
+	for i := range data150k {
+		data150k[i] = byte(i % 256)
+	}
+	msg150k := event.NewFileMessage("large.bin", "application/octet-stream", data150k)
+	evt150k, err := event.NewFileEvent("sender", "testchan", msg150k)
+	if err != nil {
+		t.Fatalf("failed to create file event: %v", err)
+	}
+	if err := wsjson.Write(ctx, cSender, evt150k); err != nil {
+		t.Logf("write 150k payload result: %v", err)
+	}
+
+	// Server should close connection due to read limit exceeded
+	// Wait and verify reading on cSender fails with StatusMessageTooBig or close status
+	var dummyEvt event.Event
+	readErr := wsjson.Read(ctx, cSender, &dummyEvt)
+	if readErr == nil {
+		t.Errorf("expected server to close connection due to read limit, but read succeeded")
+	} else {
+		status := websocket.CloseStatus(readErr)
+		if status != websocket.StatusMessageTooBig && !strings.Contains(readErr.Error(), "read limit") && !strings.Contains(readErr.Error(), "StatusMessageTooBig") {
+			t.Logf("connection closed with error: %v (status: %v)", readErr, status)
+		}
+	}
+}

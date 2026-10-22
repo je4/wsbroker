@@ -3,6 +3,7 @@ externaladdr = "https://localhost:8765"
 bearer = "%%BEARER%%"
 authtype = "bearer"
 num_workers = 10
+read_limit = 16777216
 debug = false
 ntp_server = "pool.ntp.org:123"
 ntp_timeout = "5s"

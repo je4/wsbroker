@@ -115,6 +115,7 @@ func main() {
 	ctrl.SetAuthType(conf.AuthType)
 	ctrl.SetDashboardAuth(conf.Dashboard.Username.String(), conf.Dashboard.Password.String(), conf.Dashboard.AllowBearer)
 	ctrl.SetNumWorkers(conf.NumWorkers)
+	ctrl.SetReadLimit(conf.ReadLimit)
 	ctrl.SetDebug(conf.Debug)
 	if conf.NTPServer != "" {
 		ctrl.SetNTPServer(conf.NTPServer, time.Duration(conf.NTPTimeout))

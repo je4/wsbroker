@@ -234,6 +234,7 @@ func (ctrl *controller) wsChannelHandler(c *gin.Context) {
 }
 
 func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn, name string, mode wsbrokerclient.ConnectionMode, certPerms *broker.CertPermissions, initialChannels ...string) {
+	conn.SetReadLimit(ctrl.GetReadLimit())
 	wsConn := broker.NewConnectionWithMode(conn, name, c.Request.TLS != nil, mode)
 	if err := ctrl.broker.AddWSConn(wsConn); err != nil {
 		ctrl.logger.Error().Err(err).Msgf("failed to register connection %s", name)

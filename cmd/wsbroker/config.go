@@ -28,6 +28,7 @@ type WSBrokerConfig struct {
 	ExternalAddr string             `toml:"externaladdr"`
 	Bearer       config.EnvString   `toml:"bearer"`
 	NumWorkers   int                `toml:"num_workers"`
+	ReadLimit    int64              `toml:"read_limit"`
 	Debug        bool               `toml:"debug"`
 	RESTTLS      loader.Config      `toml:"resttls"`
 	Dashboard    DashboardConfig    `toml:"dashboard"`
@@ -68,22 +69,25 @@ func LoadWSBrokerConfig(fp string, conf *WSBrokerConfig) error {
 		if mdFile.IsDefined("auth_type") && !mdFile.IsDefined("authtype") {
 			conf.AuthType = conf.AuthTypeAlt
 		}
-		return nil
-	}
-	for _, fp := range configdirs {
-		fp = expandHomedir(fp)
-		mdFile, err := toml.DecodeFile(fp, conf)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
+	} else {
+		for _, fp := range configdirs {
+			fp = expandHomedir(fp)
+			mdFile, err := toml.DecodeFile(fp, conf)
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
+				return errors.Wrapf(err, "error loading config file %v", fp)
 			}
-			return errors.Wrapf(err, "error loading config file %v", fp)
-		}
-		if mdFile.IsDefined("auth_type") && !mdFile.IsDefined("authtype") {
-			conf.AuthType = conf.AuthTypeAlt
-		}
+			if mdFile.IsDefined("auth_type") && !mdFile.IsDefined("authtype") {
+				conf.AuthType = conf.AuthTypeAlt
+			}
 
-		break
+			break
+		}
+	}
+	if conf.ReadLimit <= 0 {
+		conf.ReadLimit = 16 * 1024 * 1024
 	}
 	return nil
 }

@@ -84,6 +84,7 @@ func NewController(addr, extAddr string, tlsConfig *tls.Config, bearer string, d
 		authType:   AuthTypeBearer,
 		broker:     broker.NewConnectionManager(false, logger),
 		numWorkers: runtime.NumCPU(),
+		readLimit:  16 * 1024 * 1024,
 		debug:      false,
 	}
 	if err := c.Init(tlsConfig, dashboard); err != nil {
@@ -106,6 +107,7 @@ type controller struct {
 	allowDashboardBearer bool
 	broker               *broker.ConnectionManager
 	numWorkers           int
+	readLimit            int64
 	debug                bool
 	ntpServer            string
 	ntpTimeout           time.Duration
@@ -159,6 +161,21 @@ func (ctrl *controller) SetNumWorkers(workers int) {
 	if workers > 0 {
 		ctrl.numWorkers = workers
 	}
+}
+
+// SetReadLimit configures the maximum message read limit in bytes for incoming WebSocket connections.
+func (ctrl *controller) SetReadLimit(limit int64) {
+	if limit > 0 {
+		ctrl.readLimit = limit
+	}
+}
+
+// GetReadLimit returns the configured WebSocket read limit in bytes, defaulting to 16 MiB.
+func (ctrl *controller) GetReadLimit() int64 {
+	if ctrl.readLimit <= 0 {
+		return 16 * 1024 * 1024
+	}
+	return ctrl.readLimit
 }
 
 // SetDebug toggles debug logging mode on the controller.
