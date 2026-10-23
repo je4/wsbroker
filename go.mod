@@ -9,7 +9,7 @@ require (
 	github.com/gin-contrib/cors v1.7.9
 	github.com/gin-gonic/gin v1.12.0
 	github.com/je4/utils/v2 v2.0.71
-	github.com/je4/wsbrokerclient v0.0.0-20261015092414-343c6fb7e359
+	github.com/je4/wsbrokerclient v0.0.0-20261023184533-11e0c6af33e8
 	github.com/rs/zerolog v1.35.1
 	github.com/swaggo/swag/v2 v2.0.0-rc6
 	gitlab.switch.ch/ub-unibas/go-ublogger/v2 v2.0.1
