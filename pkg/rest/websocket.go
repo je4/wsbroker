@@ -311,6 +311,15 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 					Target: name,
 					Data:   jsonBytes,
 				})
+			} else if evt.Type == event.TypeChannelInfoQuery {
+				ctrl.logger.Error().Msgf("channel-info query for %s on %s not allowed", evt.GetSource(), name)
+				jsonBytes, _ := json.Marshal(fmt.Sprintf("channel-info query for %s on %s not allowed", evt.GetSource(), name))
+				_ = ctrl.broker.Send(&event.Event{
+					Type:   event.TypeChannelInfoError,
+					Source: "wsbroker",
+					Target: name,
+					Data:   jsonBytes,
+				})
 			} else {
 				ctrl.logger.Warn().Msgf("client %s attempted to send event with invalid source %s, dropping", name, evt.Source)
 			}
@@ -426,6 +435,71 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 				Data:   jsonBytes,
 			}); err != nil {
 				ctrl.logger.Error().Err(err).Msg("Failed to send NTP response")
+			}
+		case event.TypeChannelInfoQuery:
+			ctrl.logger.Debug().Msgf("Received channel-info query from %s: target=%s data=%s", name, evt.GetTarget(), evt.Data)
+			ch := ""
+			if d, err := evt.GetData(); err == nil && d != nil {
+				if s, ok := d.(string); ok && strings.TrimSpace(s) != "" {
+					ch = strings.TrimSpace(s)
+				}
+			}
+			if ch == "" {
+				ch = strings.TrimSpace(evt.GetTarget())
+			}
+			if ch == "" {
+				ctrl.logger.Warn().Msgf("client %s sent channel-info query without channel name", name)
+				jsonBytes, _ := json.Marshal("channel name required")
+				_ = ctrl.broker.Send(&event.Event{
+					Type:   event.TypeChannelInfoError,
+					Source: "wsbroker",
+					Target: name,
+					Data:   jsonBytes,
+				})
+				continue
+			}
+
+			if certPerms != nil && certPerms.HasRestrictions() && !certPerms.CanAccessChannel(ch, mode) {
+				ctrl.logger.Warn().Msgf("client %s certificate denied channel-info query for channel %s with mode %s", name, ch, mode)
+				jsonBytes, _ := json.Marshal(fmt.Sprintf("not authorized to access channel '%s'", ch))
+				_ = ctrl.broker.Send(&event.Event{
+					Type:   event.TypeChannelInfoError,
+					Source: "wsbroker",
+					Target: name,
+					Data:   jsonBytes,
+				})
+				continue
+			}
+
+			members := ctrl.broker.GetChannelMembers(ch)
+			if members == nil {
+				members = []string{}
+			}
+			info := ChannelInfo{
+				Name:        ch,
+				Subscribers: len(members),
+				Clients:     members,
+			}
+			jsonBytes, err := json.Marshal(info)
+			if err != nil {
+				ctrl.logger.Error().Err(err).Msgf("failed to marshal channel-info response for %s", ch)
+				errBytes, _ := json.Marshal(err.Error())
+				_ = ctrl.broker.Send(&event.Event{
+					Type:   event.TypeChannelInfoError,
+					Source: "wsbroker",
+					Target: name,
+					Data:   errBytes,
+				})
+				continue
+			}
+			ctrl.logger.Debug().Msgf("Sending channel-info response for %s to %s (%d members)", ch, name, len(members))
+			if err := ctrl.broker.Send(&event.Event{
+				Type:   event.TypeChannelInfoResponse,
+				Source: "wsbroker",
+				Target: name,
+				Data:   jsonBytes,
+			}); err != nil {
+				ctrl.logger.Error().Err(err).Msgf("failed to send channel-info response to %s", name)
 			}
 		default:
 			if !mode.CanWrite() {

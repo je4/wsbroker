@@ -678,3 +678,166 @@ func TestAuthType_BearerMode(t *testing.T) {
 		t.Fatalf("expected 401 Unauthorized, got resp: %v", resp3)
 	}
 }
+
+func TestWebSocket_ChannelInfoQuery_MTLSPermissions(t *testing.T) {
+	env := setupMTLSEnv(t)
+	logger := zerolog.Nop()
+
+	ctrl, err := NewController(":0", "https://localhost:8765", nil, "", false, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+	ctrl.SetAuthType("mtls")
+	ctrl.broker.Start(2)
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewUnstartedServer(ctrl.router)
+	server.TLS = env.serverTLS
+	server.StartTLS()
+	defer server.Close()
+
+	wsURL := "wss" + strings.TrimPrefix(server.URL, "https")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Client A: permitted only to roomA
+	clientATLS := env.makeClientTLS(t, "clientA",
+		"wsbroker:client:clientA",
+		"wsbroker:channel:roomA:rw",
+	)
+	clientADialOpts := &websocket.DialOptions{
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: clientATLS,
+			},
+		},
+	}
+
+	// Client B: permitted only to roomB
+	clientBTLS := env.makeClientTLS(t, "clientB",
+		"wsbroker:client:clientB",
+		"wsbroker:channel:roomB:rw",
+	)
+	clientBDialOpts := &websocket.DialOptions{
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: clientBTLS,
+			},
+		},
+	}
+
+	// Client C: wildcard read access
+	clientCTLS := env.makeClientTLS(t, "clientC",
+		"wsbroker:client:clientC",
+		"wsbroker:channel:*:ro",
+	)
+	clientCDialOpts := &websocket.DialOptions{
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: clientCTLS,
+			},
+		},
+	}
+
+	connA, _, err := websocket.Dial(ctx, wsURL+"/ws/clientA/rw?channel=roomA", clientADialOpts)
+	if err != nil {
+		t.Fatalf("clientA connection failed: %v", err)
+	}
+	defer connA.Close(websocket.StatusNormalClosure, "")
+
+	connB, _, err := websocket.Dial(ctx, wsURL+"/ws/clientB/rw?channel=roomB", clientBDialOpts)
+	if err != nil {
+		t.Fatalf("clientB connection failed: %v", err)
+	}
+	defer connB.Close(websocket.StatusNormalClosure, "")
+
+	connC, _, err := websocket.Dial(ctx, wsURL+"/ws/clientC/ro", clientCDialOpts)
+	if err != nil {
+		t.Fatalf("clientC connection failed: %v", err)
+	}
+	defer connC.Close(websocket.StatusNormalClosure, "")
+
+	time.Sleep(50 * time.Millisecond)
+
+	// 1. Client A queries roomA (Authorized)
+	{
+		queryEvt, err := event.NewChannelInfoQueryEvent("clientA", "roomA")
+		if err != nil {
+			t.Fatalf("failed to create query: %v", err)
+		}
+		if err := wsjson.Write(ctx, connA, queryEvt); err != nil {
+			t.Fatalf("failed to send query: %v", err)
+		}
+
+		var respEvt event.Event
+		if err := wsjson.Read(ctx, connA, &respEvt); err != nil {
+			t.Fatalf("failed to read response: %v", err)
+		}
+		if respEvt.Type != event.TypeChannelInfoResponse {
+			t.Fatalf("expected TypeChannelInfoResponse, got %s", respEvt.Type)
+		}
+		var info ChannelInfo
+		if err := respEvt.UnmarshalData(&info); err != nil {
+			t.Fatalf("failed to unmarshal ChannelInfo: %v", err)
+		}
+		if info.Name != "roomA" || info.Subscribers != 1 || len(info.Clients) != 1 || info.Clients[0] != "clientA" {
+			t.Errorf("unexpected channel info: %+v", info)
+		}
+	}
+
+	// 2. Client A queries roomB (Unauthorized / Forbidden)
+	{
+		queryEvt, err := event.NewChannelInfoQueryEvent("clientA", "roomB")
+		if err != nil {
+			t.Fatalf("failed to create query: %v", err)
+		}
+		if err := wsjson.Write(ctx, connA, queryEvt); err != nil {
+			t.Fatalf("failed to send query: %v", err)
+		}
+
+		var respEvt event.Event
+		if err := wsjson.Read(ctx, connA, &respEvt); err != nil {
+			t.Fatalf("failed to read response: %v", err)
+		}
+		if respEvt.Type != event.TypeChannelInfoError {
+			t.Fatalf("expected TypeChannelInfoError on unauthorized channel query, got %s", respEvt.Type)
+		}
+		var errMsg string
+		if err := respEvt.UnmarshalData(&errMsg); err != nil {
+			t.Fatalf("failed to unmarshal error: %v", err)
+		}
+		if !strings.Contains(errMsg, "not authorized to access channel 'roomB'") {
+			t.Errorf("expected unauthorized message, got: %s", errMsg)
+		}
+		// Verify clientB is not leaked in the raw response
+		if strings.Contains(string(respEvt.Data), "clientB") {
+			t.Errorf("security breach: clientB leaked in error response data: %s", string(respEvt.Data))
+		}
+	}
+
+	// 3. Client C with wildcard certificate queries roomB (Authorized via wildcard)
+	{
+		queryEvt, err := event.NewChannelInfoQueryEvent("clientC", "roomB")
+		if err != nil {
+			t.Fatalf("failed to create query: %v", err)
+		}
+		if err := wsjson.Write(ctx, connC, queryEvt); err != nil {
+			t.Fatalf("failed to send query: %v", err)
+		}
+
+		var respEvt event.Event
+		if err := wsjson.Read(ctx, connC, &respEvt); err != nil {
+			t.Fatalf("failed to read response: %v", err)
+		}
+		if respEvt.Type != event.TypeChannelInfoResponse {
+			t.Fatalf("expected TypeChannelInfoResponse for wildcard client, got %s", respEvt.Type)
+		}
+		var info ChannelInfo
+		if err := respEvt.UnmarshalData(&info); err != nil {
+			t.Fatalf("failed to unmarshal ChannelInfo: %v", err)
+		}
+		if info.Name != "roomB" || info.Subscribers != 1 || len(info.Clients) != 1 || info.Clients[0] != "clientB" {
+			t.Errorf("unexpected wildcard channel info result: %+v", info)
+		}
+	}
+}

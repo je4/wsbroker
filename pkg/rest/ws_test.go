@@ -6,6 +6,7 @@ import (
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -755,6 +756,200 @@ func TestWebSocket_CustomReadLimitExceeded(t *testing.T) {
 		status := websocket.CloseStatus(readErr)
 		if status != websocket.StatusMessageTooBig && !strings.Contains(readErr.Error(), "read limit") && !strings.Contains(readErr.Error(), "StatusMessageTooBig") {
 			t.Logf("connection closed with error: %v (status: %v)", readErr, status)
+		}
+	}
+}
+
+func TestWebSocket_ChannelInfoQuery(t *testing.T) {
+	logger := zerolog.Nop()
+	bearer := "test-secret"
+
+	ctrl, err := NewController(":0", "http://localhost:8765", nil, bearer, false, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+
+	ctrl.broker.Start(4)
+	defer ctrl.GracefulStop()
+
+	server := httptest.NewServer(ctrl.router)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 1. Connect Client A to room1
+	cA, _, err := websocket.Dial(ctx, wsURL+"/ws/clientA/rw?channel=room1&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("clientA dial failed: %v", err)
+	}
+	defer cA.Close(websocket.StatusNormalClosure, "")
+
+	// 2. Connect Client B to room1
+	cB, _, err := websocket.Dial(ctx, wsURL+"/ws/clientB/rw?channel=room1&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("clientB dial failed: %v", err)
+	}
+	defer cB.Close(websocket.StatusNormalClosure, "")
+
+	// 3. Connect Client C to room2
+	cC, _, err := websocket.Dial(ctx, wsURL+"/ws/clientC/rw?channel=room2&bearer="+bearer, nil)
+	if err != nil {
+		t.Fatalf("clientC dial failed: %v", err)
+	}
+	defer cC.Close(websocket.StatusNormalClosure, "")
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Scenario 1: Client A queries room1 info (target in target field)
+	{
+		queryEvt, err := event.NewChannelInfoQueryEvent("clientA", "room1")
+		if err != nil {
+			t.Fatalf("failed to create query event: %v", err)
+		}
+		if err := wsjson.Write(ctx, cA, queryEvt); err != nil {
+			t.Fatalf("failed to write query event: %v", err)
+		}
+
+		var respEvt event.Event
+		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
+			t.Fatalf("failed to read channel info response: %v", err)
+		}
+		if respEvt.Type != event.TypeChannelInfoResponse {
+			t.Fatalf("expected TypeChannelInfoResponse, got %s", respEvt.Type)
+		}
+		if respEvt.Target != "clientA" {
+			t.Errorf("expected target clientA, got %s", respEvt.Target)
+		}
+
+		var info ChannelInfo
+		if err := respEvt.UnmarshalData(&info); err != nil {
+			t.Fatalf("failed to unmarshal channel info: %v", err)
+		}
+		if info.Name != "room1" {
+			t.Errorf("expected channel name room1, got %s", info.Name)
+		}
+		if info.Subscribers != 2 {
+			t.Errorf("expected 2 subscribers, got %d", info.Subscribers)
+		}
+		if !slices.Contains(info.Clients, "clientA") || !slices.Contains(info.Clients, "clientB") {
+			t.Errorf("expected clients to contain clientA and clientB, got %v", info.Clients)
+		}
+	}
+
+	// Scenario 2: Client A queries room2 info via data payload
+	{
+		dataBytes, _ := json.Marshal("room2")
+		queryEvt := &event.Event{
+			Type:   event.TypeChannelInfoQuery,
+			Source: "clientA",
+			Data:   dataBytes,
+		}
+		if err := wsjson.Write(ctx, cA, queryEvt); err != nil {
+			t.Fatalf("failed to write query event: %v", err)
+		}
+
+		var respEvt event.Event
+		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
+			t.Fatalf("failed to read channel info response: %v", err)
+		}
+		if respEvt.Type != event.TypeChannelInfoResponse {
+			t.Fatalf("expected TypeChannelInfoResponse, got %s", respEvt.Type)
+		}
+
+		var info ChannelInfo
+		if err := respEvt.UnmarshalData(&info); err != nil {
+			t.Fatalf("failed to unmarshal channel info: %v", err)
+		}
+		if info.Name != "room2" {
+			t.Errorf("expected channel name room2, got %s", info.Name)
+		}
+		if info.Subscribers != 1 {
+			t.Errorf("expected 1 subscriber in room2, got %d", info.Subscribers)
+		}
+		if len(info.Clients) != 1 || info.Clients[0] != "clientC" {
+			t.Errorf("expected clientC in room2, got %v", info.Clients)
+		}
+	}
+
+	// Scenario 3: Non-existent / empty channel query
+	{
+		queryEvt, err := event.NewChannelInfoQueryEvent("clientA", "non-existent-channel")
+		if err != nil {
+			t.Fatalf("failed to create query event: %v", err)
+		}
+		if err := wsjson.Write(ctx, cA, queryEvt); err != nil {
+			t.Fatalf("failed to write query event: %v", err)
+		}
+
+		var respEvt event.Event
+		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
+			t.Fatalf("failed to read channel info response: %v", err)
+		}
+		if respEvt.Type != event.TypeChannelInfoResponse {
+			t.Fatalf("expected TypeChannelInfoResponse, got %s", respEvt.Type)
+		}
+
+		var info ChannelInfo
+		if err := respEvt.UnmarshalData(&info); err != nil {
+			t.Fatalf("failed to unmarshal channel info: %v", err)
+		}
+		if info.Name != "non-existent-channel" {
+			t.Errorf("expected name non-existent-channel, got %s", info.Name)
+		}
+		if info.Subscribers != 0 {
+			t.Errorf("expected 0 subscribers, got %d", info.Subscribers)
+		}
+		if len(info.Clients) != 0 {
+			t.Errorf("expected empty clients list, got %v", info.Clients)
+		}
+	}
+
+	// Scenario 4: Missing channel name
+	{
+		queryEvt := &event.Event{
+			Type:   event.TypeChannelInfoQuery,
+			Source: "clientA",
+		}
+		if err := wsjson.Write(ctx, cA, queryEvt); err != nil {
+			t.Fatalf("failed to write query event: %v", err)
+		}
+
+		var respEvt event.Event
+		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
+			t.Fatalf("failed to read channel info error response: %v", err)
+		}
+		if respEvt.Type != event.TypeChannelInfoError {
+			t.Fatalf("expected TypeChannelInfoError, got %s", respEvt.Type)
+		}
+		var errMsg string
+		if err := respEvt.UnmarshalData(&errMsg); err != nil {
+			t.Fatalf("failed to unmarshal error msg: %v", err)
+		}
+		if !strings.Contains(errMsg, "channel name required") {
+			t.Errorf("expected 'channel name required', got '%s'", errMsg)
+		}
+	}
+
+	// Scenario 5: Spoofed source
+	{
+		queryEvt := &event.Event{
+			Type:   event.TypeChannelInfoQuery,
+			Source: "spoofedSource",
+			Target: "room1",
+		}
+		if err := wsjson.Write(ctx, cA, queryEvt); err != nil {
+			t.Fatalf("failed to write query event: %v", err)
+		}
+
+		var respEvt event.Event
+		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
+			t.Fatalf("failed to read channel info error response: %v", err)
+		}
+		if respEvt.Type != event.TypeChannelInfoError {
+			t.Fatalf("expected TypeChannelInfoError on spoofed source, got %s", respEvt.Type)
 		}
 	}
 }
