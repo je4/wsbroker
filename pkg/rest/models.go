@@ -10,6 +10,7 @@ import (
 
 // PublishRequest defines the JSON payload for publishing messages via REST API endpoints.
 type PublishRequest struct {
+	ID      string         `json:"id,omitempty" example:"evt-a1b2c3d4"`
 	Source  string         `json:"source" example:"publisher-1"`
 	Target  string         `json:"target,omitempty" example:"alerts"`
 	Type    string         `json:"type" example:"message"`
@@ -20,7 +21,9 @@ type PublishRequest struct {
 
 // PublishResponse defines the JSON response returned after a message is dispatched.
 type PublishResponse struct {
+	ID          string `json:"id,omitempty" example:"evt-a1b2c3d4"`
 	Target      string `json:"target" example:"alerts"`
+	Channel     string `json:"channel,omitempty" example:"alerts"`
 	Type        string `json:"type" example:"message"`
 	Sent        bool   `json:"sent" example:"true"`
 	Subscribers int    `json:"subscribers" example:"3"`

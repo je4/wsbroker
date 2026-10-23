@@ -121,7 +121,7 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 		t.Fatalf("clientA failed to publish message: %v", err)
 	}
 
-	// Verify Client B and Client C receive message from Client A
+	// Verify Client B and Client C receive message from Client A with ID and channel populated
 	for _, client := range []*websocket.Conn{cA, cB, cC} {
 		var received event.Event
 		readCtx, readCancel := context.WithTimeout(ctx, 1*time.Second)
@@ -132,6 +132,12 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 			if data != "hello from A" {
 				t.Errorf("expected 'hello from A', got %v", data)
 			}
+			if received.ID == "" {
+				t.Errorf("expected non-empty event ID on received channel event")
+			}
+			if received.Channel != "room1" {
+				t.Errorf("expected channel 'room1', got %q", received.Channel)
+			}
 		}
 		readCancel()
 	}
@@ -139,6 +145,7 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 	// Publish message to room1 via REST POST /api/v1/channel/room1/publish
 	{
 		pubReq := PublishRequest{
+			ID:      "rest-custom-id-123",
 			Source:  "rest-api",
 			Message: "announcement via rest",
 		}
@@ -153,9 +160,20 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected 200, got %d", resp.StatusCode)
 		}
+		var pubResp PublishResponse
+		if err := json.UnmarshalRead(resp.Body, &pubResp); err != nil {
+			t.Fatalf("failed to decode publish response: %v", err)
+		}
 		resp.Body.Close()
 
-		// Verify clients receive REST announcement
+		if pubResp.ID != "rest-custom-id-123" {
+			t.Errorf("expected publish response ID 'rest-custom-id-123', got %q", pubResp.ID)
+		}
+		if pubResp.Channel != "room1" {
+			t.Errorf("expected publish response Channel 'room1', got %q", pubResp.Channel)
+		}
+
+		// Verify clients receive REST announcement with matching ID and channel
 		for _, client := range []*websocket.Conn{cB, cC} {
 			var received event.Event
 			readCtx, readCancel := context.WithTimeout(ctx, 1*time.Second)
@@ -165,6 +183,12 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 				data, _ := received.GetData()
 				if data != "announcement via rest" {
 					t.Errorf("expected 'announcement via rest', got %v", data)
+				}
+				if received.ID != "rest-custom-id-123" {
+					t.Errorf("expected event ID 'rest-custom-id-123', got %q", received.ID)
+				}
+				if received.Channel != "room1" {
+					t.Errorf("expected channel 'room1', got %q", received.Channel)
 				}
 			}
 			readCancel()

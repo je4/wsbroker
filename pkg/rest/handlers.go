@@ -66,6 +66,7 @@ func (ctrl *controller) publish(c *gin.Context) {
 	}
 
 	evt := &event.Event{
+		ID:     req.ID,
 		Type:   event.EventType(req.Type),
 		Source: req.Source,
 		Target: req.Target,
@@ -80,7 +81,9 @@ func (ctrl *controller) publish(c *gin.Context) {
 
 	subscribers := len(ctrl.broker.GetChannelMembers(req.Target))
 	c.JSON(http.StatusOK, PublishResponse{
+		ID:          evt.ID,
 		Target:      req.Target,
+		Channel:     evt.Channel,
 		Type:        req.Type,
 		Sent:        true,
 		Subscribers: subscribers,
@@ -132,6 +135,7 @@ func (ctrl *controller) publishChannel(c *gin.Context) {
 	}
 
 	evt := &event.Event{
+		ID:     req.ID,
 		Type:   event.EventType(req.Type),
 		Source: req.Source,
 		Target: req.Target,
@@ -146,7 +150,9 @@ func (ctrl *controller) publishChannel(c *gin.Context) {
 
 	subscribers := len(ctrl.broker.GetChannelMembers(channel))
 	c.JSON(http.StatusOK, PublishResponse{
+		ID:          evt.ID,
 		Target:      channel,
+		Channel:     evt.Channel,
 		Type:        req.Type,
 		Sent:        true,
 		Subscribers: subscribers,

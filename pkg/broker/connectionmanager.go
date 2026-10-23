@@ -105,6 +105,7 @@ func (manager *ConnectionManager) worker(id int, jobs <-chan *job) {
 // Send enqueues an event for dispatch. If the event target matches a known channel/group,
 // the event is fanned out to all subscribers; otherwise, it is directed to the named client.
 // Subscribers with write-only mode (ModeWO) are omitted to avoid unnecessary allocations and writes.
+// Ensures every dispatched event has a unique ID and assigns Channel when routing over a channel/group.
 func (manager *ConnectionManager) Send(evt *event.Event) error {
 	if evt == nil {
 		return errors.New("event is nil")
@@ -117,11 +118,16 @@ func (manager *ConnectionManager) Send(evt *event.Event) error {
 	}
 	manager.closedMu.Unlock()
 
+	if evt.ID == "" {
+		evt.ID = event.GenerateEventID()
+	}
+
 	target := evt.GetTarget()
 	manager.groupsMu.RLock()
 	dests, ok := manager.groups[target]
 	if ok {
 		// Target is a group/channel
+		evt.Channel = target
 		destsCopy := make([]string, 0, len(dests))
 		for _, dest := range dests {
 			if conn, exists := manager.GetWSConn(dest); exists {

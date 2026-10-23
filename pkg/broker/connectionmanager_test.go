@@ -110,12 +110,18 @@ func TestConnectionManagerGroupsAndBroadcasting(t *testing.T) {
 		t.Fatalf("failed to send sports event: %v", err)
 	}
 
-	// Verify client1 and client2 receive "goal!"
+	// Verify client1 and client2 receive "goal!" with event ID and channel name
 	select {
 	case evt := <-receivedClient1:
 		d, _ := evt.GetData()
 		if d != "goal!" {
 			t.Errorf("client1 received wrong data: %v", d)
+		}
+		if evt.ID == "" {
+			t.Errorf("client1 expected non-empty event ID")
+		}
+		if evt.Channel != "sports" {
+			t.Errorf("client1 expected channel 'sports', got %q", evt.Channel)
 		}
 	case <-time.After(1 * time.Second):
 		t.Errorf("client1 timed out waiting for sports message")
@@ -126,6 +132,12 @@ func TestConnectionManagerGroupsAndBroadcasting(t *testing.T) {
 		d, _ := evt.GetData()
 		if d != "goal!" {
 			t.Errorf("client2 received wrong data: %v", d)
+		}
+		if evt.ID == "" {
+			t.Errorf("client2 expected non-empty event ID")
+		}
+		if evt.Channel != "sports" {
+			t.Errorf("client2 expected channel 'sports', got %q", evt.Channel)
 		}
 	case <-time.After(1 * time.Second):
 		t.Errorf("client2 timed out waiting for sports message")
@@ -170,6 +182,29 @@ func TestConnectionManagerGroupsAndBroadcasting(t *testing.T) {
 	cm.RemoveFromGroup("client1", "sports")
 	if len(cm.GetChannelMembers("sports")) != 1 {
 		t.Errorf("expected 1 sports member after removal, got %v", cm.GetChannelMembers("sports"))
+	}
+
+	// Test Direct Point-to-Point message with custom ID preserves ID and keeps Channel empty
+	directEvt, _ := event.NewMessageEvent("client1", "client3", "hello direct")
+	directEvt.SetID("custom-direct-id-999")
+	if err := cm.Send(directEvt); err != nil {
+		t.Fatalf("failed to send direct event: %v", err)
+	}
+
+	select {
+	case evt := <-receivedClient3:
+		d, _ := evt.GetData()
+		if d != "hello direct" {
+			t.Errorf("client3 received wrong direct data: %v", d)
+		}
+		if evt.ID != "custom-direct-id-999" {
+			t.Errorf("expected preserved event ID 'custom-direct-id-999', got %q", evt.ID)
+		}
+		if evt.Channel != "" {
+			t.Errorf("expected empty channel for direct point-to-point event, got %q", evt.Channel)
+		}
+	case <-time.After(1 * time.Second):
+		t.Errorf("client3 timed out waiting for direct message")
 	}
 }
 
