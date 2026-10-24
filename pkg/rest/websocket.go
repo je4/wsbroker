@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"strings"
@@ -299,27 +298,21 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 			break
 		}
 
+		if evt.ID == "" {
+			evt.ID = event.GenerateEventID()
+		}
+
 		if evt.Source == "" {
 			evt.Source = name
 		} else if evt.Source != name && name != "dashboard" {
 			if evt.Type == event.TypeNTPQuery {
 				ctrl.logger.Error().Msgf("ntp event for %s on %s not allowed", evt.GetSource(), name)
-				jsonBytes, _ := json.Marshal(fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name))
-				_ = ctrl.broker.Send(&event.Event{
-					Type:   event.TypeNTPError,
-					Source: "wsbroker",
-					Target: name,
-					Data:   jsonBytes,
-				})
+				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name), evt.ID)
+				_ = ctrl.broker.Send(errEvt)
 			} else if evt.Type == event.TypeChannelInfoQuery {
 				ctrl.logger.Error().Msgf("channel-info query for %s on %s not allowed", evt.GetSource(), name)
-				jsonBytes, _ := json.Marshal(fmt.Sprintf("channel-info query for %s on %s not allowed", evt.GetSource(), name))
-				_ = ctrl.broker.Send(&event.Event{
-					Type:   event.TypeChannelInfoError,
-					Source: "wsbroker",
-					Target: name,
-					Data:   jsonBytes,
-				})
+				errEvt, _ := event.NewChannelInfoErrorEvent(name, fmt.Sprintf("channel-info query for %s on %s not allowed", evt.GetSource(), name), "wsbroker", evt.ID)
+				_ = ctrl.broker.Send(errEvt)
 			} else {
 				ctrl.logger.Warn().Msgf("client %s attempted to send event with invalid source %s, dropping", name, evt.Source)
 			}
@@ -361,6 +354,8 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 			}
 		case event.TypePing:
 			_ = ctrl.broker.Send(&event.Event{
+				ID:     event.GenerateEventID(),
+				RefID:  evt.ID,
 				Type:   event.TypePong,
 				Source: "wsbroker",
 				Target: name,
@@ -370,70 +365,44 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 			ctrl.logger.Debug().Msgf("Received NTP query from %s: %s", evt.GetSource(), evt.Data)
 			if name != evt.GetSource() && name != "dashboard" {
 				ctrl.logger.Error().Msgf("ntp event for %s on %s not allowed", evt.GetSource(), name)
-				jsonBytes, _ := json.Marshal(fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name))
-				_ = ctrl.broker.Send(&event.Event{
-					Type:   event.TypeNTPError,
-					Source: "wsbroker",
-					Target: name,
-					Data:   jsonBytes,
-				})
+				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name), evt.ID)
+				_ = ctrl.broker.Send(errEvt)
 				continue
 			}
 			if ctrl.ntpFunc == nil {
 				ctrl.logger.Error().Msg("NTP server not configured")
-				jsonBytes, _ := json.Marshal("ntp service not configured")
-				_ = ctrl.broker.Send(&event.Event{
-					Type:   event.TypeNTPError,
-					Source: "wsbroker",
-					Target: name,
-					Data:   jsonBytes,
-				})
+				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, "ntp service not configured", evt.ID)
+				_ = ctrl.broker.Send(errEvt)
 				continue
 			}
 			data, err := evt.GetData()
 			if err != nil {
 				ctrl.logger.Error().Err(err).Msg("Failed to get raw ntp data")
-				jsonBytes, _ := json.Marshal(err.Error())
-				_ = ctrl.broker.Send(&event.Event{
-					Type:   event.TypeNTPError,
-					Source: "wsbroker",
-					Target: name,
-					Data:   jsonBytes,
-				})
+				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, err.Error(), evt.ID)
+				_ = ctrl.broker.Send(errEvt)
 				continue
 			}
 			raw, ok := data.([]byte)
 			if !ok {
 				ctrl.logger.Error().Msg("NTP query data is not raw bytes")
-				jsonBytes, _ := json.Marshal("ntp query data must be raw bytes")
-				_ = ctrl.broker.Send(&event.Event{
-					Type:   event.TypeNTPError,
-					Source: "wsbroker",
-					Target: name,
-					Data:   jsonBytes,
-				})
+				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, "ntp query data must be raw bytes", evt.ID)
+				_ = ctrl.broker.Send(errEvt)
 				continue
 			}
 			result, err := ctrl.ntpFunc(raw)
 			if err != nil {
 				ctrl.logger.Error().Err(err).Msg("Failed to query ntp server")
-				jsonBytes, _ := json.Marshal(err.Error())
-				_ = ctrl.broker.Send(&event.Event{
-					Type:   event.TypeNTPError,
-					Source: "wsbroker",
-					Target: name,
-					Data:   jsonBytes,
-				})
+				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, err.Error(), evt.ID)
+				_ = ctrl.broker.Send(errEvt)
 				continue
 			}
-			jsonBytes, _ := json.Marshal(result)
+			respEvt, err := event.NewNTPResponseEvent("wsbroker", name, result, evt.ID)
+			if err != nil {
+				ctrl.logger.Error().Err(err).Msg("Failed to create ntp response event")
+				continue
+			}
 			ctrl.logger.Debug().Msgf("Sending ntp response to %s: %d bytes", evt.GetSource(), len(result))
-			if err := ctrl.broker.Send(&event.Event{
-				Type:   event.TypeNTPResponse,
-				Source: "wsbroker",
-				Target: name,
-				Data:   jsonBytes,
-			}); err != nil {
+			if err := ctrl.broker.Send(respEvt); err != nil {
 				ctrl.logger.Error().Err(err).Msg("Failed to send NTP response")
 			}
 		case event.TypeChannelInfoQuery:
@@ -449,25 +418,15 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 			}
 			if ch == "" {
 				ctrl.logger.Warn().Msgf("client %s sent channel-info query without channel name", name)
-				jsonBytes, _ := json.Marshal("channel name required")
-				_ = ctrl.broker.Send(&event.Event{
-					Type:   event.TypeChannelInfoError,
-					Source: "wsbroker",
-					Target: name,
-					Data:   jsonBytes,
-				})
+				errEvt, _ := event.NewChannelInfoErrorEvent(name, "channel name required", "wsbroker", evt.ID)
+				_ = ctrl.broker.Send(errEvt)
 				continue
 			}
 
 			if certPerms != nil && certPerms.HasRestrictions() && !certPerms.CanAccessChannel(ch, mode) {
 				ctrl.logger.Warn().Msgf("client %s certificate denied channel-info query for channel %s with mode %s", name, ch, mode)
-				jsonBytes, _ := json.Marshal(fmt.Sprintf("not authorized to access channel '%s'", ch))
-				_ = ctrl.broker.Send(&event.Event{
-					Type:   event.TypeChannelInfoError,
-					Source: "wsbroker",
-					Target: name,
-					Data:   jsonBytes,
-				})
+				errEvt, _ := event.NewChannelInfoErrorEvent(name, fmt.Sprintf("not authorized to access channel '%s'", ch), "wsbroker", evt.ID)
+				_ = ctrl.broker.Send(errEvt)
 				continue
 			}
 
@@ -480,25 +439,15 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 				Subscribers: len(members),
 				Clients:     members,
 			}
-			jsonBytes, err := json.Marshal(info)
+			respEvt, err := event.NewChannelInfoResponseEvent(name, info, "wsbroker", evt.ID)
 			if err != nil {
 				ctrl.logger.Error().Err(err).Msgf("failed to marshal channel-info response for %s", ch)
-				errBytes, _ := json.Marshal(err.Error())
-				_ = ctrl.broker.Send(&event.Event{
-					Type:   event.TypeChannelInfoError,
-					Source: "wsbroker",
-					Target: name,
-					Data:   errBytes,
-				})
+				errEvt, _ := event.NewChannelInfoErrorEvent(name, err.Error(), "wsbroker", evt.ID)
+				_ = ctrl.broker.Send(errEvt)
 				continue
 			}
 			ctrl.logger.Debug().Msgf("Sending channel-info response for %s to %s (%d members)", ch, name, len(members))
-			if err := ctrl.broker.Send(&event.Event{
-				Type:   event.TypeChannelInfoResponse,
-				Source: "wsbroker",
-				Target: name,
-				Data:   jsonBytes,
-			}); err != nil {
+			if err := ctrl.broker.Send(respEvt); err != nil {
 				ctrl.logger.Error().Err(err).Msgf("failed to send channel-info response to %s", name)
 			}
 		default:

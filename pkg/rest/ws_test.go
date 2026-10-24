@@ -402,6 +402,12 @@ func TestWebSocketModes_PermissionsAndSuppression(t *testing.T) {
 		if evt.Type != event.TypePong {
 			t.Errorf("clientRO expected Pong event, got %v", evt.Type)
 		}
+		if evt.RefID != pingEvt.ID {
+			t.Errorf("expected pong RefID %s, got %s", pingEvt.ID, evt.RefID)
+		}
+		if evt.ID == "" || evt.ID == pingEvt.ID {
+			t.Errorf("expected unique pong ID, got %s (ping ID: %s)", evt.ID, pingEvt.ID)
+		}
 		d, _ := evt.GetData()
 		if d != "ping-payload" {
 			t.Errorf("clientRO expected ping-payload, got %v", d)
@@ -844,6 +850,12 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 		if respEvt.Type != event.TypeChannelInfoResponse {
 			t.Fatalf("expected TypeChannelInfoResponse, got %s", respEvt.Type)
 		}
+		if respEvt.RefID != queryEvt.ID {
+			t.Errorf("expected RefID %s, got %s", queryEvt.ID, respEvt.RefID)
+		}
+		if respEvt.ID == "" || respEvt.ID == queryEvt.ID {
+			t.Errorf("expected unique response ID, got %s (query ID: %s)", respEvt.ID, queryEvt.ID)
+		}
 		if respEvt.Target != "clientA" {
 			t.Errorf("expected target clientA, got %s", respEvt.Target)
 		}
@@ -867,6 +879,7 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 	{
 		dataBytes, _ := json.Marshal("room2")
 		queryEvt := &event.Event{
+			ID:     "ch-query-2",
 			Type:   event.TypeChannelInfoQuery,
 			Source: "clientA",
 			Data:   dataBytes,
@@ -881,6 +894,12 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 		}
 		if respEvt.Type != event.TypeChannelInfoResponse {
 			t.Fatalf("expected TypeChannelInfoResponse, got %s", respEvt.Type)
+		}
+		if respEvt.RefID != queryEvt.ID {
+			t.Errorf("expected RefID %s, got %s", queryEvt.ID, respEvt.RefID)
+		}
+		if respEvt.ID == "" || respEvt.ID == queryEvt.ID {
+			t.Errorf("expected unique response ID, got %s (query ID: %s)", respEvt.ID, queryEvt.ID)
 		}
 
 		var info ChannelInfo
@@ -915,6 +934,12 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 		if respEvt.Type != event.TypeChannelInfoResponse {
 			t.Fatalf("expected TypeChannelInfoResponse, got %s", respEvt.Type)
 		}
+		if respEvt.RefID != queryEvt.ID {
+			t.Errorf("expected RefID %s, got %s", queryEvt.ID, respEvt.RefID)
+		}
+		if respEvt.ID == "" || respEvt.ID == queryEvt.ID {
+			t.Errorf("expected unique response ID, got %s (query ID: %s)", respEvt.ID, queryEvt.ID)
+		}
 
 		var info ChannelInfo
 		if err := respEvt.UnmarshalData(&info); err != nil {
@@ -934,6 +959,7 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 	// Scenario 4: Missing channel name
 	{
 		queryEvt := &event.Event{
+			ID:     "ch-query-4",
 			Type:   event.TypeChannelInfoQuery,
 			Source: "clientA",
 		}
@@ -948,6 +974,12 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 		if respEvt.Type != event.TypeChannelInfoError {
 			t.Fatalf("expected TypeChannelInfoError, got %s", respEvt.Type)
 		}
+		if respEvt.RefID != queryEvt.ID {
+			t.Errorf("expected RefID %s, got %s", queryEvt.ID, respEvt.RefID)
+		}
+		if respEvt.ID == "" || respEvt.ID == queryEvt.ID {
+			t.Errorf("expected unique response ID, got %s (query ID: %s)", respEvt.ID, queryEvt.ID)
+		}
 		var errMsg string
 		if err := respEvt.UnmarshalData(&errMsg); err != nil {
 			t.Fatalf("failed to unmarshal error msg: %v", err)
@@ -960,6 +992,7 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 	// Scenario 5: Spoofed source
 	{
 		queryEvt := &event.Event{
+			ID:     "ch-query-5",
 			Type:   event.TypeChannelInfoQuery,
 			Source: "spoofedSource",
 			Target: "room1",
@@ -974,6 +1007,38 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 		}
 		if respEvt.Type != event.TypeChannelInfoError {
 			t.Fatalf("expected TypeChannelInfoError on spoofed source, got %s", respEvt.Type)
+		}
+		if respEvt.RefID != queryEvt.ID {
+			t.Errorf("expected RefID %s, got %s", queryEvt.ID, respEvt.RefID)
+		}
+		if respEvt.ID == "" || respEvt.ID == queryEvt.ID {
+			t.Errorf("expected unique response ID, got %s (query ID: %s)", respEvt.ID, queryEvt.ID)
+		}
+	}
+
+	// Scenario 6: Omitted query ID (broker generates event ID and sets RefID on response)
+	{
+		queryEvt := &event.Event{
+			Type:   event.TypeChannelInfoQuery,
+			Source: "clientA",
+			Target: "room1",
+		}
+		if err := wsjson.Write(ctx, cA, queryEvt); err != nil {
+			t.Fatalf("failed to write query event: %v", err)
+		}
+
+		var respEvt event.Event
+		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
+			t.Fatalf("failed to read channel info response: %v", err)
+		}
+		if respEvt.Type != event.TypeChannelInfoResponse {
+			t.Fatalf("expected TypeChannelInfoResponse, got %s", respEvt.Type)
+		}
+		if respEvt.RefID == "" {
+			t.Errorf("expected non-empty RefID from generated query ID")
+		}
+		if respEvt.ID == "" || respEvt.ID == respEvt.RefID {
+			t.Errorf("expected unique response ID, got ID=%s RefID=%s", respEvt.ID, respEvt.RefID)
 		}
 	}
 }

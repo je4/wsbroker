@@ -1,7 +1,7 @@
 {
     "components": {
         "schemas": {
-            "pkg_rest.HTTPResultMessage": {
+            "rest.HTTPResultMessage": {
                 "properties": {
                     "code": {
                         "example": 400,
@@ -14,14 +14,22 @@
                 },
                 "type": "object"
             },
-            "pkg_rest.PublishRequest": {
+            "rest.PublishRequest": {
                 "properties": {
                     "data": {
                         "example": "{\"text\":\"hello world\"}",
                         "type": "string"
                     },
+                    "id": {
+                        "example": "evt-a1b2c3d4",
+                        "type": "string"
+                    },
                     "message": {
                         "example": "hello world",
+                        "type": "string"
+                    },
+                    "ref_id": {
+                        "example": "evt-e5f6a7b8",
                         "type": "string"
                     },
                     "source": {
@@ -42,8 +50,20 @@
                 },
                 "type": "object"
             },
-            "pkg_rest.PublishResponse": {
+            "rest.PublishResponse": {
                 "properties": {
+                    "channel": {
+                        "example": "alerts",
+                        "type": "string"
+                    },
+                    "id": {
+                        "example": "evt-a1b2c3d4",
+                        "type": "string"
+                    },
+                    "ref_id": {
+                        "example": "evt-e5f6a7b8",
+                        "type": "string"
+                    },
                     "sent": {
                         "example": true,
                         "type": "boolean"
@@ -78,7 +98,7 @@
             "name": "Jürgen Enge",
             "url": "https://ub.unibas.ch"
         },
-        "description": "returns list of all connected clients",
+        "description": "WSBroker API",
         "license": {
             "name": "Apache 2.0",
             "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
@@ -125,7 +145,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -162,7 +182,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/pkg_rest.PublishRequest",
+                                "$ref": "#/components/schemas/rest.PublishRequest",
                                 "summary": "body",
                                 "description": "Publish payload"
                             }
@@ -176,7 +196,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.PublishResponse"
+                                    "$ref": "#/components/schemas/rest.PublishResponse"
                                 }
                             }
                         },
@@ -186,7 +206,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -196,7 +216,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -236,7 +256,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -249,6 +269,64 @@
                     }
                 ],
                 "summary": "list active channels",
+                "tags": [
+                    "wsbroker"
+                ]
+            }
+        },
+        "/client/{name}": {
+            "delete": {
+                "description": "disconnects a connected WebSocket client by name",
+                "operationId": "delete-client",
+                "parameters": [
+                    {
+                        "description": "Client name",
+                        "in": "path",
+                        "name": "name",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Unauthorized"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "summary": "disconnect client",
                 "tags": [
                     "wsbroker"
                 ]
@@ -276,7 +354,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -324,7 +402,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/pkg_rest.PublishRequest",
+                                "$ref": "#/components/schemas/rest.PublishRequest",
                                 "summary": "body",
                                 "description": "Publish payload"
                             }
@@ -338,7 +416,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.PublishResponse"
+                                    "$ref": "#/components/schemas/rest.PublishResponse"
                                 }
                             }
                         },
@@ -348,7 +426,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -358,7 +436,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -378,23 +456,6 @@
         }
     },
     "openapi": "3.1.0",
-    "security": [
-        {
-            "BearerAuth": []
-        },
-        {
-            "BearerAuth": []
-        },
-        {
-            "BearerAuth": []
-        },
-        {
-            "BearerAuth": []
-        },
-        {
-            "BearerAuth": []
-        }
-    ],
     "servers": [
         {
             "description": "WSBroker API base path",

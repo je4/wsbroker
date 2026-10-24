@@ -8,7 +8,7 @@ const docTemplateWSBroker = `{
     "schemes": {{ marshal .Schemes }},
     "components": {
         "schemas": {
-            "pkg_rest.HTTPResultMessage": {
+            "rest.HTTPResultMessage": {
                 "properties": {
                     "code": {
                         "example": 400,
@@ -21,14 +21,22 @@ const docTemplateWSBroker = `{
                 },
                 "type": "object"
             },
-            "pkg_rest.PublishRequest": {
+            "rest.PublishRequest": {
                 "properties": {
                     "data": {
                         "example": "{\"text\":\"hello world\"}",
                         "type": "string"
                     },
+                    "id": {
+                        "example": "evt-a1b2c3d4",
+                        "type": "string"
+                    },
                     "message": {
                         "example": "hello world",
+                        "type": "string"
+                    },
+                    "ref_id": {
+                        "example": "evt-e5f6a7b8",
                         "type": "string"
                     },
                     "source": {
@@ -49,8 +57,20 @@ const docTemplateWSBroker = `{
                 },
                 "type": "object"
             },
-            "pkg_rest.PublishResponse": {
+            "rest.PublishResponse": {
                 "properties": {
+                    "channel": {
+                        "example": "alerts",
+                        "type": "string"
+                    },
+                    "id": {
+                        "example": "evt-a1b2c3d4",
+                        "type": "string"
+                    },
+                    "ref_id": {
+                        "example": "evt-e5f6a7b8",
+                        "type": "string"
+                    },
                     "sent": {
                         "example": true,
                         "type": "boolean"
@@ -132,7 +152,7 @@ const docTemplateWSBroker = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -169,7 +189,7 @@ const docTemplateWSBroker = `{
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/pkg_rest.PublishRequest",
+                                "$ref": "#/components/schemas/rest.PublishRequest",
                                 "summary": "body",
                                 "description": "Publish payload"
                             }
@@ -183,7 +203,7 @@ const docTemplateWSBroker = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.PublishResponse"
+                                    "$ref": "#/components/schemas/rest.PublishResponse"
                                 }
                             }
                         },
@@ -193,7 +213,7 @@ const docTemplateWSBroker = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -203,7 +223,7 @@ const docTemplateWSBroker = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -243,7 +263,7 @@ const docTemplateWSBroker = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -256,6 +276,64 @@ const docTemplateWSBroker = `{
                     }
                 ],
                 "summary": "list active channels",
+                "tags": [
+                    "wsbroker"
+                ]
+            }
+        },
+        "/client/{name}": {
+            "delete": {
+                "description": "disconnects a connected WebSocket client by name",
+                "operationId": "delete-client",
+                "parameters": [
+                    {
+                        "description": "Client name",
+                        "in": "path",
+                        "name": "name",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Unauthorized"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "summary": "disconnect client",
                 "tags": [
                     "wsbroker"
                 ]
@@ -283,7 +361,7 @@ const docTemplateWSBroker = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -331,7 +409,7 @@ const docTemplateWSBroker = `{
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/pkg_rest.PublishRequest",
+                                "$ref": "#/components/schemas/rest.PublishRequest",
                                 "summary": "body",
                                 "description": "Publish payload"
                             }
@@ -345,7 +423,7 @@ const docTemplateWSBroker = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.PublishResponse"
+                                    "$ref": "#/components/schemas/rest.PublishResponse"
                                 }
                             }
                         },
@@ -355,7 +433,7 @@ const docTemplateWSBroker = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -365,7 +443,7 @@ const docTemplateWSBroker = `{
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/pkg_rest.HTTPResultMessage"
+                                    "$ref": "#/components/schemas/rest.HTTPResultMessage"
                                 }
                             }
                         },
@@ -385,23 +463,6 @@ const docTemplateWSBroker = `{
         }
     },
     "openapi": "3.1.0",
-    "security": [
-        {
-            "BearerAuth": []
-        },
-        {
-            "BearerAuth": []
-        },
-        {
-            "BearerAuth": []
-        },
-        {
-            "BearerAuth": []
-        },
-        {
-            "BearerAuth": []
-        }
-    ],
     "servers": [
         {
             "description": "WSBroker API base path",
@@ -414,7 +475,7 @@ const docTemplateWSBroker = `{
 var SwaggerInfoWSBroker = &swag.Spec{
 	Version:          "1.0",
 	Title:            "WSBroker API",
-	Description:      "returns list of all connected clients",
+	Description:      "WSBroker API",
 	InfoInstanceName: "WSBroker",
 	SwaggerTemplate:  docTemplateWSBroker,
 	LeftDelim:        "{{",

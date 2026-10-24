@@ -149,6 +149,12 @@ func TestNTPWebSocket_EndToEnd(t *testing.T) {
 	if respEvt.Type != event.TypeNTPResponse {
 		t.Fatalf("expected event type %s, got %s", event.TypeNTPResponse, respEvt.Type)
 	}
+	if respEvt.RefID != queryEvt.ID {
+		t.Errorf("expected RefID %s, got %s", queryEvt.ID, respEvt.RefID)
+	}
+	if respEvt.ID == "" || respEvt.ID == queryEvt.ID {
+		t.Errorf("expected unique response ID, got %s (query ID: %s)", respEvt.ID, queryEvt.ID)
+	}
 
 	data, err := respEvt.GetData()
 	if err != nil {
@@ -207,6 +213,12 @@ func TestNTPWebSocket_ErrorWhenNotConfigured(t *testing.T) {
 
 	if respEvt.Type != event.TypeNTPError {
 		t.Fatalf("expected event type %s, got %s", event.TypeNTPError, respEvt.Type)
+	}
+	if respEvt.RefID != queryEvt.ID {
+		t.Errorf("expected RefID %s, got %s", queryEvt.ID, respEvt.RefID)
+	}
+	if respEvt.ID == "" || respEvt.ID == queryEvt.ID {
+		t.Errorf("expected unique response ID, got %s (query ID: %s)", respEvt.ID, queryEvt.ID)
 	}
 }
 
@@ -314,6 +326,12 @@ func TestNTPWebSocket_SourceMismatchForbidden(t *testing.T) {
 	if respEvt.Type != event.TypeNTPError {
 		t.Fatalf("expected event type %s on source mismatch, got %s", event.TypeNTPError, respEvt.Type)
 	}
+	if respEvt.RefID != queryEvt.ID {
+		t.Errorf("expected RefID %s, got %s", queryEvt.ID, respEvt.RefID)
+	}
+	if respEvt.ID == "" || respEvt.ID == queryEvt.ID {
+		t.Errorf("expected unique response ID, got %s (query ID: %s)", respEvt.ID, queryEvt.ID)
+	}
 }
 
 func TestNTPWebSocket_ForwarderError(t *testing.T) {
@@ -362,5 +380,11 @@ func TestNTPWebSocket_ForwarderError(t *testing.T) {
 
 	if respEvt.Type != event.TypeNTPError {
 		t.Fatalf("expected event type %s on forwarder error, got %s", event.TypeNTPError, respEvt.Type)
+	}
+	if respEvt.RefID != queryEvt.ID {
+		t.Errorf("expected RefID %s, got %s", queryEvt.ID, respEvt.RefID)
+	}
+	if respEvt.ID == "" || respEvt.ID == queryEvt.ID {
+		t.Errorf("expected unique response ID, got %s (query ID: %s)", respEvt.ID, queryEvt.ID)
 	}
 }

@@ -1,6 +1,6 @@
 components:
   schemas:
-    pkg_rest.HTTPResultMessage:
+    rest.HTTPResultMessage:
       properties:
         code:
           example: 400
@@ -9,13 +9,19 @@ components:
           example: status bad request
           type: string
       type: object
-    pkg_rest.PublishRequest:
+    rest.PublishRequest:
       properties:
         data:
           example: '{"text":"hello world"}'
           type: string
+        id:
+          example: evt-a1b2c3d4
+          type: string
         message:
           example: hello world
+          type: string
+        ref_id:
+          example: evt-e5f6a7b8
           type: string
         source:
           example: publisher-1
@@ -29,8 +35,17 @@ components:
           example: message
           type: string
       type: object
-    pkg_rest.PublishResponse:
+    rest.PublishResponse:
       properties:
+        channel:
+          example: alerts
+          type: string
+        id:
+          example: evt-a1b2c3d4
+          type: string
+        ref_id:
+          example: evt-e5f6a7b8
+          type: string
         sent:
           example: true
           type: boolean
@@ -57,7 +72,7 @@ info:
     email: juergen.enge@unibas.ch
     name: Jürgen Enge
     url: https://ub.unibas.ch
-  description: returns list of all connected clients
+  description: WSBroker API
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
@@ -90,7 +105,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pkg_rest.HTTPResultMessage'
+                $ref: '#/components/schemas/rest.HTTPResultMessage'
           description: Unauthorized
       security:
       - BearerAuth: []
@@ -112,7 +127,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/pkg_rest.PublishRequest'
+              $ref: '#/components/schemas/rest.PublishRequest'
               description: Publish payload
               summary: body
         description: Publish payload
@@ -122,19 +137,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pkg_rest.PublishResponse'
+                $ref: '#/components/schemas/rest.PublishResponse'
           description: OK
         "400":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pkg_rest.HTTPResultMessage'
+                $ref: '#/components/schemas/rest.HTTPResultMessage'
           description: Bad Request
         "401":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pkg_rest.HTTPResultMessage'
+                $ref: '#/components/schemas/rest.HTTPResultMessage'
           description: Unauthorized
       security:
       - BearerAuth: []
@@ -158,11 +173,46 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pkg_rest.HTTPResultMessage'
+                $ref: '#/components/schemas/rest.HTTPResultMessage'
           description: Unauthorized
       security:
       - BearerAuth: []
       summary: list active channels
+      tags:
+      - wsbroker
+  /client/{name}:
+    delete:
+      description: disconnects a connected WebSocket client by name
+      operationId: delete-client
+      parameters:
+      - description: Client name
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/rest.HTTPResultMessage'
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/rest.HTTPResultMessage'
+          description: Unauthorized
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/rest.HTTPResultMessage'
+          description: Not Found
+      security:
+      - BearerAuth: []
+      summary: disconnect client
       tags:
       - wsbroker
   /clients:
@@ -182,7 +232,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pkg_rest.HTTPResultMessage'
+                $ref: '#/components/schemas/rest.HTTPResultMessage'
           description: Unauthorized
       security:
       - BearerAuth: []
@@ -211,7 +261,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/pkg_rest.PublishRequest'
+              $ref: '#/components/schemas/rest.PublishRequest'
               description: Publish payload
               summary: body
         description: Publish payload
@@ -221,31 +271,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pkg_rest.PublishResponse'
+                $ref: '#/components/schemas/rest.PublishResponse'
           description: OK
         "400":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pkg_rest.HTTPResultMessage'
+                $ref: '#/components/schemas/rest.HTTPResultMessage'
           description: Bad Request
         "401":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pkg_rest.HTTPResultMessage'
+                $ref: '#/components/schemas/rest.HTTPResultMessage'
           description: Unauthorized
       security:
       - BearerAuth: []
       summary: publish message to target
       tags:
       - wsbroker
-security:
-- BearerAuth: []
-- BearerAuth: []
-- BearerAuth: []
-- BearerAuth: []
-- BearerAuth: []
 servers:
 - description: WSBroker API base path
   url: /api/v1

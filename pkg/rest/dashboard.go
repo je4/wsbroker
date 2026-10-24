@@ -187,6 +187,7 @@ func (ctrl *controller) dashboardPublishHandler(c *gin.Context) {
 	}
 
 	evt := &event.Event{
+		ID:     event.GenerateEventID(),
 		Type:   event.EventType(msgType),
 		Source: source,
 		Target: target,
