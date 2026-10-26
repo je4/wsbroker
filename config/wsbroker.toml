@@ -1,7 +1,8 @@
 localaddr = "localhost:8765"
 externaladdr = "https://localhost:8765"
-bearer = "%%BEARER%%"
-authtype = "bearer"
+rest_bearer = "%%REST_BEARER%%"
+ws_bearer = "%%WS_BEARER%%"
+ws_authtype = "bearer"
 num_workers = 10
 read_limit = 16777216
 debug = false

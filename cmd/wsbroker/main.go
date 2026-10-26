@@ -102,17 +102,19 @@ func main() {
 	dashboardEnabled := *dashboard || conf.Dashboard.Enabled
 	if dashboardEnabled {
 		if conf.Dashboard.Username.String() == "" || conf.Dashboard.Password.String() == "" {
-			if !conf.Dashboard.AllowBearer || conf.Bearer.String() == "" {
+			if !conf.Dashboard.AllowBearer || (conf.RestBearer.String() == "" && conf.Bearer.String() == "") {
 				logger.Warn().Msg("dashboard is enabled without authentication credentials configured (basic auth credentials or bearer fallback required for secure operation)")
 			}
 		}
 	}
 
-	ctrl, err := rest.NewController(conf.LocalAddr, conf.ExternalAddr, restTLSConfig, conf.Bearer.String(), dashboardEnabled, logger)
+	ctrl, err := rest.NewController(conf.LocalAddr, conf.ExternalAddr, restTLSConfig, conf.RestBearer.String(), dashboardEnabled, logger)
 	if err != nil {
 		logger.Fatal().Msgf("cannot create controller: %v", err)
 	}
-	ctrl.SetAuthType(conf.AuthType)
+	ctrl.SetRESTBearer(conf.RestBearer.String())
+	ctrl.SetWSBearer(conf.WSBearer.String())
+	ctrl.SetWSAuthType(conf.WSAuthType)
 	ctrl.SetDashboardAuth(conf.Dashboard.Username.String(), conf.Dashboard.Password.String(), conf.Dashboard.AllowBearer)
 	ctrl.SetNumWorkers(conf.NumWorkers)
 	ctrl.SetReadLimit(conf.ReadLimit)

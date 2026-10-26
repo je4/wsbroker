@@ -25,6 +25,28 @@ func (ctrl *controller) extractBearerToken(c *gin.Context) (string, bool) {
 	return "", false
 }
 
+func (ctrl *controller) validateRESTBearerToken(token string) bool {
+	restBearer := ctrl.GetRESTBearer()
+	if len(restBearer) == 0 {
+		return true
+	}
+	if token == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(token), []byte(restBearer)) == 1
+}
+
+func (ctrl *controller) validateWSBearerToken(token string) bool {
+	wsBearer := ctrl.GetWSBearer()
+	if len(wsBearer) == 0 {
+		return true
+	}
+	if token == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(token), []byte(wsBearer)) == 1
+}
+
 func (ctrl *controller) validateBearerToken(token string) bool {
 	if len(ctrl.bearer) == 0 {
 		return true
@@ -35,12 +57,12 @@ func (ctrl *controller) validateBearerToken(token string) bool {
 	return subtle.ConstantTimeCompare([]byte(token), []byte(ctrl.bearer)) == 1
 }
 
-func (ctrl *controller) checkBearer(c *gin.Context) bool {
-	if len(ctrl.bearer) == 0 {
+func (ctrl *controller) checkRESTBearer(c *gin.Context) bool {
+	if len(ctrl.GetRESTBearer()) == 0 {
 		return true
 	}
 	token, hasToken := ctrl.extractBearerToken(c)
-	if !hasToken || !ctrl.validateBearerToken(token) {
+	if !hasToken || !ctrl.validateRESTBearerToken(token) {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
 			Code:    http.StatusUnauthorized,
 			Message: "invalid bearer token",
@@ -50,15 +72,43 @@ func (ctrl *controller) checkBearer(c *gin.Context) bool {
 	return true
 }
 
-func (ctrl *controller) checkBearerSilent(c *gin.Context) bool {
-	if len(ctrl.bearer) == 0 {
-		return false
-	}
+func (ctrl *controller) checkBearer(c *gin.Context) bool {
+	return ctrl.checkRESTBearer(c)
+}
+
+func (ctrl *controller) checkDashboardBearerSilent(c *gin.Context) bool {
 	token, hasToken := ctrl.extractBearerToken(c)
 	if !hasToken {
 		return false
 	}
-	return ctrl.validateBearerToken(token)
+	if len(ctrl.GetRESTBearer()) > 0 && ctrl.validateRESTBearerToken(token) {
+		return true
+	}
+	if len(ctrl.bearer) > 0 && ctrl.validateBearerToken(token) {
+		return true
+	}
+	return false
+}
+
+func (ctrl *controller) checkBearerSilent(c *gin.Context) bool {
+	return ctrl.checkDashboardBearerSilent(c)
+}
+
+func (ctrl *controller) restAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if strings.HasSuffix(c.Request.URL.Path, "/ping") {
+			c.Next()
+			return
+		}
+		if len(ctrl.GetRESTBearer()) == 0 {
+			c.Next()
+			return
+		}
+		if !ctrl.checkRESTBearer(c) {
+			return
+		}
+		c.Next()
+	}
 }
 
 func (ctrl *controller) dashboardSecurityMiddleware() gin.HandlerFunc {

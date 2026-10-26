@@ -27,7 +27,7 @@ func getCertPermissions(c *gin.Context) *broker.CertPermissions {
 }
 
 func (ctrl *controller) authenticateWS(c *gin.Context) (*broker.CertPermissions, bool) {
-	switch ctrl.GetAuthType() {
+	switch ctrl.GetWSAuthType() {
 	case AuthTypeMTLS:
 		if c.Request.TLS == nil || len(c.Request.TLS.PeerCertificates) == 0 {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
@@ -41,7 +41,7 @@ func (ctrl *controller) authenticateWS(c *gin.Context) (*broker.CertPermissions,
 	case AuthTypeBoth:
 		token, hasToken := ctrl.extractBearerToken(c)
 		if hasToken {
-			if !ctrl.validateBearerToken(token) {
+			if !ctrl.validateWSBearerToken(token) {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
 					Code:    http.StatusUnauthorized,
 					Message: "invalid bearer token",
@@ -62,9 +62,9 @@ func (ctrl *controller) authenticateWS(c *gin.Context) (*broker.CertPermissions,
 	case AuthTypeBearer:
 		fallthrough
 	default:
-		if len(ctrl.bearer) > 0 {
+		if len(ctrl.GetWSBearer()) > 0 {
 			token, hasToken := ctrl.extractBearerToken(c)
-			if !hasToken || !ctrl.validateBearerToken(token) {
+			if !hasToken || !ctrl.validateWSBearerToken(token) {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
 					Code:    http.StatusUnauthorized,
 					Message: "invalid bearer token",

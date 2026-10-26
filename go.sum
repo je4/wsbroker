@@ -80,8 +80,8 @@ github.com/je4/trustutil/v2 v2.0.31 h1:QUMfnE8LoyNlBLvhaMdSZFiq/UlOoHyPjJd+C6qT5
 github.com/je4/trustutil/v2 v2.0.31/go.mod h1:76JX2f0YrNvxiI9kVufLdlc4qTVGXpk64BiThBxzWGs=
 github.com/je4/utils/v2 v2.0.71 h1:PEzwBdpdSiJej+sb8PKpG/3CRYyuxvn3RX7ajzB/EX0=
 github.com/je4/utils/v2 v2.0.71/go.mod h1:GUTGKzLcu4u3lopSPjpxs3TK/fQGtHTGEEdbNb2WCxU=
-github.com/je4/wsbrokerclient v0.0.0-20261024090841-b7ef94ccfa6e h1:eUyABWpafDOWaLT0s0uxi+VsLeeu6MG3hmTmtB4FsEU=
-github.com/je4/wsbrokerclient v0.0.0-20261024090841-b7ef94ccfa6e/go.mod h1:bMEWSUrtTdQaXW/B9HJ3xMGiH3OMN4hUbIppMpi4oJA=
+github.com/je4/wsbrokerclient v0.0.0-20261026171007-a62b6a4a8560 h1:1x9mZXlkyIw+i12YxPsQPD6c67ATg3OP9ncNYK+zjJc=
+github.com/je4/wsbrokerclient v0.0.0-20261026171007-a62b6a4a8560/go.mod h1:bMEWSUrtTdQaXW/B9HJ3xMGiH3OMN4hUbIppMpi4oJA=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/klauspost/cpuid/v2 v2.4.1 h1:I9KxadAkvo+QjtcEE2f2tyfEvmIla/T0m+14PrZNl0U=

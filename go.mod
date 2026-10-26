@@ -1,6 +1,6 @@
 module github.com/je4/wsbroker
 
-go 1.27
+go 1.27.2
 
 require (
 	emperror.dev/errors v0.8.1
@@ -9,7 +9,7 @@ require (
 	github.com/gin-contrib/cors v1.7.9
 	github.com/gin-gonic/gin v1.12.0
 	github.com/je4/utils/v2 v2.0.71
-	github.com/je4/wsbrokerclient v0.0.0-20261024090841-b7ef94ccfa6e
+	github.com/je4/wsbrokerclient v0.0.0-20261026171007-a62b6a4a8560
 	github.com/rs/zerolog v1.35.1
 	github.com/swaggo/swag/v2 v2.0.0-rc6
 	gitlab.switch.ch/ub-unibas/go-ublogger/v2 v2.0.1

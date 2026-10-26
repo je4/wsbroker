@@ -4,7 +4,6 @@ package rest
 
 import (
 	"context"
-	"crypto/subtle"
 	"crypto/tls"
 	"encoding/json/v2"
 	"fmt"
@@ -81,7 +80,10 @@ func NewController(addr, extAddr string, tlsConfig *tls.Config, bearer string, d
 		subpath:    subpath,
 		logger:     logger,
 		bearer:     bearer,
+		restBearer: bearer,
+		wsBearer:   bearer,
 		authType:   AuthTypeBearer,
+		wsAuthType: AuthTypeBearer,
 		broker:     broker.NewConnectionManager(false, logger),
 		numWorkers: runtime.NumCPU(),
 		readLimit:  16 * 1024 * 1024,
@@ -100,8 +102,11 @@ type controller struct {
 	addr                 string
 	subpath              string
 	logger               zLogger.ZLogger
+	restBearer           string
+	wsBearer             string
 	bearer               string
 	authType             AuthType
+	wsAuthType           AuthType
 	dashboardUser        string
 	dashboardPass        string
 	allowDashboardBearer bool
@@ -130,23 +135,69 @@ func (ctrl *controller) SetNTPForwarder(forwarder NTPForwarder) {
 	ctrl.ntpFunc = forwarder
 }
 
-// SetAuthType sets and normalizes the authentication type ("bearer", "mtls", "both").
-func (ctrl *controller) SetAuthType(authType string) {
+// SetRESTBearer configures the Bearer token for protected REST API endpoints.
+func (ctrl *controller) SetRESTBearer(bearer string) {
+	ctrl.restBearer = bearer
+	if ctrl.bearer == "" {
+		ctrl.bearer = bearer
+	}
+}
+
+// GetRESTBearer returns the configured REST Bearer token.
+func (ctrl *controller) GetRESTBearer() string {
+	if ctrl.restBearer != "" {
+		return ctrl.restBearer
+	}
+	return ctrl.bearer
+}
+
+// SetWSBearer configures the Bearer token for WebSocket connections.
+func (ctrl *controller) SetWSBearer(bearer string) {
+	ctrl.wsBearer = bearer
+	if ctrl.bearer == "" {
+		ctrl.bearer = bearer
+	}
+}
+
+// GetWSBearer returns the configured WebSocket Bearer token.
+func (ctrl *controller) GetWSBearer() string {
+	if ctrl.wsBearer != "" {
+		return ctrl.wsBearer
+	}
+	return ctrl.bearer
+}
+
+// SetWSAuthType sets and normalizes the WebSocket authentication type ("bearer", "mtls", "both").
+func (ctrl *controller) SetWSAuthType(authType string) {
 	norm := strings.ToLower(strings.TrimSpace(authType))
 	switch AuthType(norm) {
 	case AuthTypeBearer, AuthTypeMTLS, AuthTypeBoth:
-		ctrl.authType = AuthType(norm)
+		ctrl.wsAuthType = AuthType(norm)
 	default:
-		ctrl.authType = AuthTypeBearer
+		ctrl.wsAuthType = AuthTypeBearer
 	}
+	ctrl.authType = ctrl.wsAuthType
+}
+
+// GetWSAuthType returns the configured WebSocket AuthType.
+func (ctrl *controller) GetWSAuthType() AuthType {
+	if ctrl.wsAuthType != "" {
+		return ctrl.wsAuthType
+	}
+	if ctrl.authType != "" {
+		return ctrl.authType
+	}
+	return AuthTypeBearer
+}
+
+// SetAuthType sets and normalizes the authentication type ("bearer", "mtls", "both").
+func (ctrl *controller) SetAuthType(authType string) {
+	ctrl.SetWSAuthType(authType)
 }
 
 // GetAuthType returns the configured AuthType.
 func (ctrl *controller) GetAuthType() AuthType {
-	if ctrl.authType == "" {
-		return AuthTypeBearer
-	}
-	return ctrl.authType
+	return ctrl.GetWSAuthType()
 }
 
 // SetDashboardAuth configures the HTTP Basic Auth credentials and optional bearer token fallback for dashboard access.
@@ -234,31 +285,7 @@ func (ctrl *controller) Init(tlsConfig *tls.Config, dashboard bool) error {
 
 	v1.GET("/ping", ctrl.ping)
 
-	if len(ctrl.bearer) > 0 {
-		v1.Use(func(c *gin.Context) {
-			if strings.HasSuffix(c.Request.URL.Path, "/ping") {
-				c.Next()
-				return
-			}
-			authHeader := c.Request.Header.Get("Authorization")
-			token := ""
-			if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
-				token = after
-			} else if qToken := c.Query("token"); qToken != "" {
-				token = qToken
-			} else if qBearer := c.Query("bearer"); qBearer != "" {
-				token = qBearer
-			}
-			if subtle.ConstantTimeCompare([]byte(token), []byte(ctrl.bearer)) != 1 {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, HTTPResultMessage{
-					Code:    http.StatusUnauthorized,
-					Message: "invalid bearer token",
-				})
-				return
-			}
-			c.Next()
-		})
-	}
+	v1.Use(ctrl.restAuthMiddleware())
 
 	// REST Broker Endpoints
 	v1.POST("/publish", ctrl.publish)

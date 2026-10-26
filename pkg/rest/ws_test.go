@@ -1042,3 +1042,191 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 		}
 	}
 }
+
+func TestDecoupledRESTAndWebSocketAuth(t *testing.T) {
+	logger := zerolog.Nop()
+
+	// Scenario 1: Distinct REST Bearer and WS Bearer tokens
+	{
+		restSecret := "rest-secret-token"
+		wsSecret := "ws-secret-token"
+
+		ctrl, err := NewController(":0", "http://localhost:8765", nil, "", true, &logger)
+		if err != nil {
+			t.Fatalf("failed to create controller: %v", err)
+		}
+		ctrl.SetRESTBearer(restSecret)
+		ctrl.SetWSBearer(wsSecret)
+		ctrl.SetWSAuthType("bearer")
+
+		ctrl.broker.Start(2)
+		defer ctrl.GracefulStop()
+
+		server := httptest.NewServer(ctrl.router)
+		defer server.Close()
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// 1.a WebSocket dial with valid wsSecret succeeds
+		wsConn, _, err := websocket.Dial(ctx, wsURL+"/ws/client1/rw?bearer="+wsSecret, nil)
+		if err != nil {
+			t.Fatalf("expected WS connection to succeed with wsSecret, got error: %v", err)
+		}
+		wsConn.Close(websocket.StatusNormalClosure, "")
+
+		// 1.b WebSocket dial with restSecret fails (401)
+		_, wsResp, err := websocket.Dial(ctx, wsURL+"/ws/client2/rw?bearer="+restSecret, nil)
+		if err == nil {
+			t.Fatalf("expected WS connection to fail with restSecret, but succeeded")
+		}
+		if wsResp != nil && wsResp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("expected 401 for WS connection with restSecret, got %d", wsResp.StatusCode)
+		}
+
+		// 1.c REST POST /api/v1/publish with restSecret succeeds
+		reqRestOk, _ := http.NewRequest(http.MethodPost, server.URL+"/api/v1/publish", strings.NewReader(`{"target":"chan1","message":"hello"}`))
+		reqRestOk.Header.Set("Content-Type", "application/json")
+		reqRestOk.Header.Set("Authorization", "Bearer "+restSecret)
+		respRestOk, err := http.DefaultClient.Do(reqRestOk)
+		if err != nil {
+			t.Fatalf("REST request with restSecret failed: %v", err)
+		}
+		if respRestOk.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for REST with restSecret, got %d", respRestOk.StatusCode)
+		}
+		respRestOk.Body.Close()
+
+		// 1.d REST POST /api/v1/publish with wsSecret fails (401)
+		reqRestFail, _ := http.NewRequest(http.MethodPost, server.URL+"/api/v1/publish", strings.NewReader(`{"target":"chan1","message":"hello"}`))
+		reqRestFail.Header.Set("Content-Type", "application/json")
+		reqRestFail.Header.Set("Authorization", "Bearer "+wsSecret)
+		respRestFail, err := http.DefaultClient.Do(reqRestFail)
+		if err != nil {
+			t.Fatalf("REST request with wsSecret failed: %v", err)
+		}
+		if respRestFail.StatusCode != http.StatusUnauthorized {
+			t.Errorf("expected 401 for REST with wsSecret, got %d", respRestFail.StatusCode)
+		}
+		respRestFail.Body.Close()
+	}
+
+	// Scenario 2: WebSocket MTLS mode combined with REST Bearer token
+	{
+		restSecret := "rest-only-secret"
+
+		ctrl, err := NewController(":0", "http://localhost:8765", nil, "", true, &logger)
+		if err != nil {
+			t.Fatalf("failed to create controller: %v", err)
+		}
+		ctrl.SetRESTBearer(restSecret)
+		ctrl.SetWSAuthType("mtls")
+
+		ctrl.broker.Start(2)
+		defer ctrl.GracefulStop()
+
+		server := httptest.NewServer(ctrl.router)
+		defer server.Close()
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// 2.a REST endpoint works with REST Bearer
+		reqRest, _ := http.NewRequest(http.MethodGet, server.URL+"/api/v1/channels", nil)
+		reqRest.Header.Set("Authorization", "Bearer "+restSecret)
+		respRest, err := http.DefaultClient.Do(reqRest)
+		if err != nil {
+			t.Fatalf("REST request failed: %v", err)
+		}
+		if respRest.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for REST with restSecret in MTLS mode, got %d", respRest.StatusCode)
+		}
+		respRest.Body.Close()
+
+		// 2.b WebSocket connection without client cert fails (401) even if restSecret is provided
+		_, wsResp, err := websocket.Dial(ctx, wsURL+"/ws/clientMTLS/rw?bearer="+restSecret, nil)
+		if err == nil {
+			t.Fatalf("expected WS connection to fail in MTLS mode without cert, but succeeded")
+		}
+		if wsResp != nil && wsResp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("expected 401 for WS connection in MTLS mode without cert, got %d", wsResp.StatusCode)
+		}
+	}
+
+	// Scenario 3: WebSocket 'both' mode with independent tokens
+	{
+		restSecret := "rest-both-secret"
+		wsSecret := "ws-both-secret"
+
+		ctrl, err := NewController(":0", "http://localhost:8765", nil, "", true, &logger)
+		if err != nil {
+			t.Fatalf("failed to create controller: %v", err)
+		}
+		ctrl.SetRESTBearer(restSecret)
+		ctrl.SetWSBearer(wsSecret)
+		ctrl.SetWSAuthType("both")
+
+		ctrl.broker.Start(2)
+		defer ctrl.GracefulStop()
+
+		server := httptest.NewServer(ctrl.router)
+		defer server.Close()
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// 3.a WebSocket succeeds with wsSecret
+		wsConn, _, err := websocket.Dial(ctx, wsURL+"/ws/clientBoth/rw?bearer="+wsSecret, nil)
+		if err != nil {
+			t.Fatalf("expected WS connection to succeed with wsSecret in 'both' mode, got error: %v", err)
+		}
+		wsConn.Close(websocket.StatusNormalClosure, "")
+
+		// 3.b WebSocket fails with restSecret
+		_, wsResp, err := websocket.Dial(ctx, wsURL+"/ws/clientBoth2/rw?bearer="+restSecret, nil)
+		if err == nil {
+			t.Fatalf("expected WS connection to fail with restSecret in 'both' mode without cert, but succeeded")
+		}
+		if wsResp != nil && wsResp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("expected 401 for WS connection with restSecret in 'both' mode, got %d", wsResp.StatusCode)
+		}
+	}
+
+	// Scenario 4: Backwards compatibility with legacy single bearer token
+	{
+		legacySecret := "common-legacy-secret"
+
+		ctrl, err := NewController(":0", "http://localhost:8765", nil, legacySecret, true, &logger)
+		if err != nil {
+			t.Fatalf("failed to create controller: %v", err)
+		}
+
+		ctrl.broker.Start(2)
+		defer ctrl.GracefulStop()
+
+		server := httptest.NewServer(ctrl.router)
+		defer server.Close()
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// 4.a WebSocket succeeds with legacySecret
+		wsConn, _, err := websocket.Dial(ctx, wsURL+"/ws/clientLegacy/rw?bearer="+legacySecret, nil)
+		if err != nil {
+			t.Fatalf("expected WS connection to succeed with legacySecret, got error: %v", err)
+		}
+		wsConn.Close(websocket.StatusNormalClosure, "")
+
+		// 4.b REST succeeds with legacySecret
+		reqRest, _ := http.NewRequest(http.MethodGet, server.URL+"/api/v1/channels", nil)
+		reqRest.Header.Set("Authorization", "Bearer "+legacySecret)
+		respRest, err := http.DefaultClient.Do(reqRest)
+		if err != nil {
+			t.Fatalf("REST request with legacySecret failed: %v", err)
+		}
+		if respRest.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 for REST with legacySecret, got %d", respRest.StatusCode)
+		}
+		respRest.Body.Close()
+	}
+}

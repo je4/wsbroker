@@ -259,3 +259,212 @@ func TestRestPublishRefIDCorrelation(t *testing.T) {
 		}
 	}
 }
+
+func TestRestBearerAuthenticationSuite(t *testing.T) {
+	logger := zerolog.Nop()
+	validToken := "secure-api-key-12345"
+
+	ctrl, err := NewController(":0", "http://localhost:8080", nil, validToken, true, &logger)
+	if err != nil {
+		t.Fatalf("failed to create controller: %v", err)
+	}
+	ctrl.broker.Start(2)
+	defer ctrl.GracefulStop()
+
+	// 1. Public Endpoint Exemptions (should return 200 without credentials)
+	{
+		// GET /api/v1/ping
+		wPing := httptest.NewRecorder()
+		reqPing, _ := http.NewRequest(http.MethodGet, "/api/v1/ping", nil)
+		ctrl.router.ServeHTTP(wPing, reqPing)
+		if wPing.Code != http.StatusOK || !strings.Contains(wPing.Body.String(), "pong") {
+			t.Errorf("expected 200 'pong' for public ping, got %d: %s", wPing.Code, wPing.Body.String())
+		}
+
+		// GET /swagger/index.html
+		wSwag := httptest.NewRecorder()
+		reqSwag, _ := http.NewRequest(http.MethodGet, "/swagger/index.html", nil)
+		ctrl.router.ServeHTTP(wSwag, reqSwag)
+		if wSwag.Code != http.StatusOK {
+			t.Errorf("expected 200 for public swagger ui, got %d", wSwag.Code)
+		}
+
+		// GET /swagger/doc.json
+		wDoc := httptest.NewRecorder()
+		reqDoc, _ := http.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
+		ctrl.router.ServeHTTP(wDoc, reqDoc)
+		if wDoc.Code != http.StatusOK {
+			t.Errorf("expected 200 for public swagger doc, got %d", wDoc.Code)
+		}
+	}
+
+	// 2. Missing Authentication on protected endpoints (should return 401 JSON)
+	protectedRequests := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodPost, "/api/v1/publish", `{"target":"test","message":"hello"}`},
+		{http.MethodPost, "/api/v1/channel/testchan/publish", `{"message":"hello"}`},
+		{http.MethodGet, "/api/v1/channels", ""},
+		{http.MethodGet, "/api/v1/channel/testchan/clients", ""},
+		{http.MethodGet, "/api/v1/clients", ""},
+		{http.MethodDelete, "/api/v1/client/testclient", ""},
+		{http.MethodDelete, "/api/v1/clients/testclient", ""},
+	}
+
+	for _, tc := range protectedRequests {
+		w := httptest.NewRecorder()
+		var bodyReader *strings.Reader
+		if tc.body != "" {
+			bodyReader = strings.NewReader(tc.body)
+		} else {
+			bodyReader = strings.NewReader("")
+		}
+		req, _ := http.NewRequest(tc.method, tc.path, bodyReader)
+		if tc.body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		ctrl.router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 for missing auth on %s %s, got %d: %s", tc.method, tc.path, w.Code, w.Body.String())
+		}
+
+		var resMsg HTTPResultMessage
+		if err := json.Unmarshal(w.Body.Bytes(), &resMsg); err != nil {
+			t.Errorf("failed to unmarshal 401 response for %s %s: %v", tc.method, tc.path, err)
+		} else if resMsg.Code != http.StatusUnauthorized || resMsg.Message != "invalid bearer token" {
+			t.Errorf("expected 401 'invalid bearer token' on %s %s, got: %+v", tc.method, tc.path, resMsg)
+		}
+	}
+
+	// 3. Invalid Authentication (wrong token in header, ?token, ?bearer)
+	invalidAuthCases := []struct {
+		name       string
+		authHeader string
+		query      string
+	}{
+		{"wrong bearer header", "Bearer wrong-token", ""},
+		{"malformed auth header", "Basic dXNlcjpwYXNz", ""},
+		{"wrong query token", "", "?token=wrong-token"},
+		{"wrong query bearer", "", "?bearer=wrong-token"},
+	}
+
+	for _, tc := range invalidAuthCases {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/channels"+tc.query, nil)
+		if tc.authHeader != "" {
+			req.Header.Set("Authorization", tc.authHeader)
+		}
+		ctrl.router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 for invalid auth (%s), got %d: %s", tc.name, w.Code, w.Body.String())
+		}
+	}
+
+	// 4. Valid Authentication via Header
+	{
+		// POST /api/v1/publish
+		wPub := httptest.NewRecorder()
+		reqPub, _ := http.NewRequest(http.MethodPost, "/api/v1/publish", strings.NewReader(`{"target":"chan1","message":"test"}`))
+		reqPub.Header.Set("Content-Type", "application/json")
+		reqPub.Header.Set("Authorization", "Bearer "+validToken)
+		ctrl.router.ServeHTTP(wPub, reqPub)
+		if wPub.Code != http.StatusOK {
+			t.Errorf("expected 200 for valid header on POST /api/v1/publish, got %d: %s", wPub.Code, wPub.Body.String())
+		}
+
+		// GET /api/v1/channels
+		wChan := httptest.NewRecorder()
+		reqChan, _ := http.NewRequest(http.MethodGet, "/api/v1/channels", nil)
+		reqChan.Header.Set("Authorization", "Bearer "+validToken)
+		ctrl.router.ServeHTTP(wChan, reqChan)
+		if wChan.Code != http.StatusOK {
+			t.Errorf("expected 200 for valid header on GET /api/v1/channels, got %d: %s", wChan.Code, wChan.Body.String())
+		}
+
+		// GET /api/v1/clients
+		wCli := httptest.NewRecorder()
+		reqCli, _ := http.NewRequest(http.MethodGet, "/api/v1/clients", nil)
+		reqCli.Header.Set("Authorization", "Bearer "+validToken)
+		ctrl.router.ServeHTTP(wCli, reqCli)
+		if wCli.Code != http.StatusOK {
+			t.Errorf("expected 200 for valid header on GET /api/v1/clients, got %d: %s", wCli.Code, wCli.Body.String())
+		}
+	}
+
+	// 5. Valid Authentication via Query Parameters (?token= and ?bearer=)
+	{
+		// POST /api/v1/channel/:channel/publish?token=...
+		wToken := httptest.NewRecorder()
+		reqToken, _ := http.NewRequest(http.MethodPost, "/api/v1/channel/alerts/publish?token="+validToken, strings.NewReader(`{"message":"test token"}`))
+		reqToken.Header.Set("Content-Type", "application/json")
+		ctrl.router.ServeHTTP(wToken, reqToken)
+		if wToken.Code != http.StatusOK {
+			t.Errorf("expected 200 for valid ?token= parameter, got %d: %s", wToken.Code, wToken.Body.String())
+		}
+
+		// GET /api/v1/channels?bearer=...
+		wBearer := httptest.NewRecorder()
+		reqBearer, _ := http.NewRequest(http.MethodGet, "/api/v1/channels?bearer="+validToken, nil)
+		ctrl.router.ServeHTTP(wBearer, reqBearer)
+		if wBearer.Code != http.StatusOK {
+			t.Errorf("expected 200 for valid ?bearer= parameter, got %d: %s", wBearer.Code, wBearer.Body.String())
+		}
+	}
+
+	// 6. Controller with Empty Bearer Token (Unauthenticated Mode)
+	{
+		ctrlNoAuth, err := NewController(":0", "http://localhost:8080", nil, "", true, &logger)
+		if err != nil {
+			t.Fatalf("failed to create unauthenticated controller: %v", err)
+		}
+		ctrlNoAuth.broker.Start(2)
+		defer ctrlNoAuth.GracefulStop()
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/publish", strings.NewReader(`{"target":"alerts","message":"public msg"}`))
+		req.Header.Set("Content-Type", "application/json")
+		ctrlNoAuth.router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200 when bearer is unconfigured, got %d: %s", w.Code, w.Body.String())
+		}
+	}
+
+	// 7. Decoupled REST Bearer vs WS Bearer
+	{
+		restSecret := "rest-secret-key-777"
+		wsSecret := "ws-secret-key-888"
+
+		ctrlDecoupled, err := NewController(":0", "http://localhost:8080", nil, "", true, &logger)
+		if err != nil {
+			t.Fatalf("failed to create decoupled controller: %v", err)
+		}
+		ctrlDecoupled.SetRESTBearer(restSecret)
+		ctrlDecoupled.SetWSBearer(wsSecret)
+		ctrlDecoupled.broker.Start(2)
+		defer ctrlDecoupled.GracefulStop()
+
+		// Verify REST endpoint with restSecret succeeds
+		wRestOk := httptest.NewRecorder()
+		reqRestOk, _ := http.NewRequest(http.MethodPost, "/api/v1/publish", strings.NewReader(`{"target":"alerts","message":"hello rest"}`))
+		reqRestOk.Header.Set("Content-Type", "application/json")
+		reqRestOk.Header.Set("Authorization", "Bearer "+restSecret)
+		ctrlDecoupled.router.ServeHTTP(wRestOk, reqRestOk)
+		if wRestOk.Code != http.StatusOK {
+			t.Errorf("expected 200 with restSecret on POST /api/v1/publish, got %d: %s", wRestOk.Code, wRestOk.Body.String())
+		}
+
+		// Verify REST endpoint with wsSecret fails (401)
+		wRestFail := httptest.NewRecorder()
+		reqRestFail, _ := http.NewRequest(http.MethodPost, "/api/v1/publish", strings.NewReader(`{"target":"alerts","message":"hello rest"}`))
+		reqRestFail.Header.Set("Content-Type", "application/json")
+		reqRestFail.Header.Set("Authorization", "Bearer "+wsSecret)
+		ctrlDecoupled.router.ServeHTTP(wRestFail, reqRestFail)
+		if wRestFail.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 with wsSecret on POST /api/v1/publish, got %d: %s", wRestFail.Code, wRestFail.Body.String())
+		}
+	}
+}
