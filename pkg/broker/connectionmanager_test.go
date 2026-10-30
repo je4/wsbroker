@@ -62,17 +62,17 @@ func TestConnectionManagerGroupsAndBroadcasting(t *testing.T) {
 	}
 	defer c3.Close(websocket.StatusNormalClosure, "")
 
-	var receivedClient1 = make(chan *event.Event, 10)
-	var receivedClient2 = make(chan *event.Event, 10)
-	var receivedClient3 = make(chan *event.Event, 10)
+	var receivedClient1 = make(chan *event.RawEvent, 10)
+	var receivedClient2 = make(chan *event.RawEvent, 10)
+	var receivedClient3 = make(chan *event.RawEvent, 10)
 
 	var wg sync.WaitGroup
-	startReader := func(c *websocket.Conn, ch chan *event.Event) {
+	startReader := func(c *websocket.Conn, ch chan *event.RawEvent) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for {
-				var evt event.Event
+				var evt event.RawEvent
 				if err := wsjson.Read(ctx, c, &evt); err != nil {
 					break
 				}
@@ -302,14 +302,14 @@ func TestConnectionManagerWriteOnlySuppression(t *testing.T) {
 	}
 	defer cRW.Close(websocket.StatusNormalClosure, "")
 
-	var receivedRO = make(chan *event.Event, 10)
-	var receivedWO = make(chan *event.Event, 10)
-	var receivedRW = make(chan *event.Event, 10)
+	var receivedRO = make(chan *event.RawEvent, 10)
+	var receivedWO = make(chan *event.RawEvent, 10)
+	var receivedRW = make(chan *event.RawEvent, 10)
 
-	startReader := func(c *websocket.Conn, ch chan *event.Event) {
+	startReader := func(c *websocket.Conn, ch chan *event.RawEvent) {
 		go func() {
 			for {
-				var evt event.Event
+				var evt event.RawEvent
 				if err := wsjson.Read(ctx, c, &evt); err != nil {
 					break
 				}

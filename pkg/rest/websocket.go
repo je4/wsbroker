@@ -287,7 +287,7 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 	}()
 
 	for {
-		var evt = &event.Event{}
+		var evt = &event.RawEvent{}
 		if err := wsjson.Read(ctx, conn, evt); err != nil {
 			status := websocket.CloseStatus(err)
 			if status == websocket.StatusNormalClosure || status == websocket.StatusGoingAway || status == websocket.StatusNoStatusRcvd {
@@ -353,13 +353,15 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 				ctrl.broker.RemoveFromGroup(name, ch)
 			}
 		case event.TypePing:
-			_ = ctrl.broker.Send(&event.Event{
-				ID:     event.GenerateEventID(),
-				RefID:  evt.ID,
-				Type:   event.TypePong,
-				Source: "wsbroker",
-				Target: name,
-				Data:   evt.Data,
+			_ = ctrl.broker.Send(&event.RawEvent{
+				BaseEvent: event.BaseEvent{
+					ID:     event.GenerateEventID(),
+					RefID:  evt.ID,
+					Type:   event.TypePong,
+					Source: "wsbroker",
+					Target: name,
+				},
+				Data: evt.Data,
 			})
 		case event.TypeNTPQuery:
 			ctrl.logger.Debug().Msgf("Received NTP query from %s: %s", evt.GetSource(), evt.Data)

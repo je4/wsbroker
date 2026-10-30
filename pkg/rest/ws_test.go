@@ -3,6 +3,7 @@ package rest
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -123,7 +124,7 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 
 	// Verify Client B and Client C receive message from Client A with ID and channel populated
 	for _, client := range []*websocket.Conn{cA, cB, cC} {
-		var received event.Event
+		var received event.RawEvent
 		readCtx, readCancel := context.WithTimeout(ctx, 1*time.Second)
 		if err := wsjson.Read(readCtx, client, &received); err != nil {
 			t.Errorf("failed to receive message on client: %v", err)
@@ -175,7 +176,7 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 
 		// Verify clients receive REST announcement with matching ID and channel
 		for _, client := range []*websocket.Conn{cB, cC} {
-			var received event.Event
+			var received event.RawEvent
 			readCtx, readCancel := context.WithTimeout(ctx, 1*time.Second)
 			if err := wsjson.Read(readCtx, client, &received); err != nil {
 				t.Errorf("failed to receive rest announcement on client: %v", err)
@@ -225,7 +226,7 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 		resp.Body.Close()
 
 		// Client B should receive it
-		var receivedB event.Event
+		var receivedB event.RawEvent
 		readCtxB, readCancelB := context.WithTimeout(ctx, 1*time.Second)
 		if err := wsjson.Read(readCtxB, cB, &receivedB); err != nil {
 			t.Errorf("clientB failed to receive: %v", err)
@@ -238,7 +239,7 @@ func TestWebSocketChannelsAndRestPublish(t *testing.T) {
 		readCancelB()
 
 		// Client C should NOT receive it
-		var receivedC event.Event
+		var receivedC event.RawEvent
 		readCtxC, readCancelC := context.WithTimeout(ctx, 100*time.Millisecond)
 		if err := wsjson.Read(readCtxC, cC, &receivedC); err == nil {
 			t.Errorf("clientC should not have received message after detach, got: %+v", receivedC)
@@ -318,14 +319,14 @@ func TestWebSocketModes_PermissionsAndSuppression(t *testing.T) {
 	}
 	defer cRW.Close(websocket.StatusNormalClosure, "")
 
-	var receivedRO = make(chan *event.Event, 10)
-	var receivedWO = make(chan *event.Event, 10)
-	var receivedRW = make(chan *event.Event, 10)
+	var receivedRO = make(chan *event.RawEvent, 10)
+	var receivedWO = make(chan *event.RawEvent, 10)
+	var receivedRW = make(chan *event.RawEvent, 10)
 
-	startReader := func(c *websocket.Conn, ch chan *event.Event) {
+	startReader := func(c *websocket.Conn, ch chan *event.RawEvent) {
 		go func() {
 			for {
-				var evt event.Event
+				var evt event.RawEvent
 				if err := wsjson.Read(ctx, c, &evt); err != nil {
 					break
 				}
@@ -535,10 +536,10 @@ func TestWebSocket_SourceValidation(t *testing.T) {
 	}
 	defer cReceiver.Close(websocket.StatusNormalClosure, "")
 
-	received := make(chan *event.Event, 10)
+	received := make(chan *event.RawEvent, 10)
 	go func() {
 		for {
-			var evt event.Event
+			var evt event.RawEvent
 			if err := wsjson.Read(ctx, cReceiver, &evt); err != nil {
 				return
 			}
@@ -682,7 +683,7 @@ func TestWebSocket_LargePayload(t *testing.T) {
 	}
 
 	// 4. Receiver reads event
-	var recEvt event.Event
+	var recEvt event.RawEvent
 	if err := wsjson.Read(ctx, cReceiver, &recEvt); err != nil {
 		t.Fatalf("receiver failed to read large file event: %v", err)
 	}
@@ -757,7 +758,7 @@ func TestWebSocket_CustomReadLimitExceeded(t *testing.T) {
 		t.Fatalf("failed to send 20k payload: %v", err)
 	}
 
-	var recEvt20k event.Event
+	var recEvt20k event.RawEvent
 	if err := wsjson.Read(ctx, cReceiver, &recEvt20k); err != nil {
 		t.Fatalf("failed to receive 20k payload: %v", err)
 	}
@@ -778,7 +779,7 @@ func TestWebSocket_CustomReadLimitExceeded(t *testing.T) {
 
 	// Server should close connection due to read limit exceeded
 	// Wait and verify reading on cSender fails with StatusMessageTooBig or close status
-	var dummyEvt event.Event
+	var dummyEvt event.RawEvent
 	readErr := wsjson.Read(ctx, cSender, &dummyEvt)
 	if readErr == nil {
 		t.Errorf("expected server to close connection due to read limit, but read succeeded")
@@ -843,7 +844,7 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 			t.Fatalf("failed to write query event: %v", err)
 		}
 
-		var respEvt event.Event
+		var respEvt event.RawEvent
 		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
 			t.Fatalf("failed to read channel info response: %v", err)
 		}
@@ -878,17 +879,19 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 	// Scenario 2: Client A queries room2 info via data payload
 	{
 		dataBytes, _ := json.Marshal("room2")
-		queryEvt := &event.Event{
-			ID:     "ch-query-2",
-			Type:   event.TypeChannelInfoQuery,
-			Source: "clientA",
-			Data:   dataBytes,
+		queryEvt := &event.RawEvent{
+			BaseEvent: event.BaseEvent{
+				ID:     "ch-query-2",
+				Type:   event.TypeChannelInfoQuery,
+				Source: "clientA",
+			},
+			Data: jsontext.Value(dataBytes),
 		}
 		if err := wsjson.Write(ctx, cA, queryEvt); err != nil {
 			t.Fatalf("failed to write query event: %v", err)
 		}
 
-		var respEvt event.Event
+		var respEvt event.RawEvent
 		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
 			t.Fatalf("failed to read channel info response: %v", err)
 		}
@@ -927,7 +930,7 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 			t.Fatalf("failed to write query event: %v", err)
 		}
 
-		var respEvt event.Event
+		var respEvt event.RawEvent
 		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
 			t.Fatalf("failed to read channel info response: %v", err)
 		}
@@ -958,16 +961,18 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 
 	// Scenario 4: Missing channel name
 	{
-		queryEvt := &event.Event{
-			ID:     "ch-query-4",
-			Type:   event.TypeChannelInfoQuery,
-			Source: "clientA",
+		queryEvt := &event.RawEvent{
+			BaseEvent: event.BaseEvent{
+				ID:     "ch-query-4",
+				Type:   event.TypeChannelInfoQuery,
+				Source: "clientA",
+			},
 		}
 		if err := wsjson.Write(ctx, cA, queryEvt); err != nil {
 			t.Fatalf("failed to write query event: %v", err)
 		}
 
-		var respEvt event.Event
+		var respEvt event.RawEvent
 		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
 			t.Fatalf("failed to read channel info error response: %v", err)
 		}
@@ -991,17 +996,19 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 
 	// Scenario 5: Spoofed source
 	{
-		queryEvt := &event.Event{
-			ID:     "ch-query-5",
-			Type:   event.TypeChannelInfoQuery,
-			Source: "spoofedSource",
-			Target: "room1",
+		queryEvt := &event.RawEvent{
+			BaseEvent: event.BaseEvent{
+				ID:     "ch-query-5",
+				Type:   event.TypeChannelInfoQuery,
+				Source: "spoofedSource",
+				Target: "room1",
+			},
 		}
 		if err := wsjson.Write(ctx, cA, queryEvt); err != nil {
 			t.Fatalf("failed to write query event: %v", err)
 		}
 
-		var respEvt event.Event
+		var respEvt event.RawEvent
 		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
 			t.Fatalf("failed to read channel info error response: %v", err)
 		}
@@ -1018,16 +1025,18 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 
 	// Scenario 6: Omitted query ID (broker generates event ID and sets RefID on response)
 	{
-		queryEvt := &event.Event{
-			Type:   event.TypeChannelInfoQuery,
-			Source: "clientA",
-			Target: "room1",
+		queryEvt := &event.RawEvent{
+			BaseEvent: event.BaseEvent{
+				Type:   event.TypeChannelInfoQuery,
+				Source: "clientA",
+				Target: "room1",
+			},
 		}
 		if err := wsjson.Write(ctx, cA, queryEvt); err != nil {
 			t.Fatalf("failed to write query event: %v", err)
 		}
 
-		var respEvt event.Event
+		var respEvt event.RawEvent
 		if err := wsjson.Read(ctx, cA, &respEvt); err != nil {
 			t.Fatalf("failed to read channel info response: %v", err)
 		}

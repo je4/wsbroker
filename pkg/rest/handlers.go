@@ -3,6 +3,7 @@
 package rest
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"net/http"
@@ -53,7 +54,7 @@ func (ctrl *controller) publish(c *gin.Context) {
 		req.Type = string(event.TypeMessage)
 	}
 
-	var data []byte
+	var data jsontext.Value
 	if len(req.Data) > 0 {
 		data = req.Data
 	} else if req.Message != "" {
@@ -62,7 +63,7 @@ func (ctrl *controller) publish(c *gin.Context) {
 			NewResultMessage(c, http.StatusBadRequest, errors.Wrap(err, "failed to marshal message"))
 			return
 		}
-		data = b
+		data = jsontext.Value(b)
 	}
 
 	eventID := req.ID
@@ -70,14 +71,16 @@ func (ctrl *controller) publish(c *gin.Context) {
 		eventID = event.GenerateEventID()
 	}
 
-	evt := &event.Event{
-		ID:     eventID,
-		RefID:  req.RefID,
-		Type:   event.EventType(req.Type),
-		Source: req.Source,
-		Target: req.Target,
-		Token:  req.Token,
-		Data:   data,
+	evt := &event.RawEvent{
+		BaseEvent: event.BaseEvent{
+			ID:     eventID,
+			RefID:  req.RefID,
+			Type:   event.EventType(req.Type),
+			Source: req.Source,
+			Target: req.Target,
+			Token:  req.Token,
+		},
+		Data: data,
 	}
 
 	if err := ctrl.broker.Send(evt); err != nil {
@@ -129,7 +132,7 @@ func (ctrl *controller) publishChannel(c *gin.Context) {
 		req.Type = string(event.TypeMessage)
 	}
 
-	var data []byte
+	var data jsontext.Value
 	if len(req.Data) > 0 {
 		data = req.Data
 	} else if req.Message != "" {
@@ -138,7 +141,7 @@ func (ctrl *controller) publishChannel(c *gin.Context) {
 			NewResultMessage(c, http.StatusBadRequest, errors.Wrap(err, "failed to marshal message"))
 			return
 		}
-		data = b
+		data = jsontext.Value(b)
 	}
 
 	eventID := req.ID
@@ -146,14 +149,16 @@ func (ctrl *controller) publishChannel(c *gin.Context) {
 		eventID = event.GenerateEventID()
 	}
 
-	evt := &event.Event{
-		ID:     eventID,
-		RefID:  req.RefID,
-		Type:   event.EventType(req.Type),
-		Source: req.Source,
-		Target: req.Target,
-		Token:  req.Token,
-		Data:   data,
+	evt := &event.RawEvent{
+		BaseEvent: event.BaseEvent{
+			ID:     eventID,
+			RefID:  req.RefID,
+			Type:   event.EventType(req.Type),
+			Source: req.Source,
+			Target: req.Target,
+			Token:  req.Token,
+		},
+		Data: data,
 	}
 
 	if err := ctrl.broker.Send(evt); err != nil {

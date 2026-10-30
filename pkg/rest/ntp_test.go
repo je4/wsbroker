@@ -141,7 +141,7 @@ func TestNTPWebSocket_EndToEnd(t *testing.T) {
 	}
 
 	// Read response
-	var respEvt event.Event
+	var respEvt event.RawEvent
 	if err := wsjson.Read(ctx, conn, &respEvt); err != nil {
 		t.Fatalf("failed to read event: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestNTPWebSocket_ErrorWhenNotConfigured(t *testing.T) {
 		t.Fatalf("failed to write ntp query event: %v", err)
 	}
 
-	var respEvt event.Event
+	var respEvt event.RawEvent
 	if err := wsjson.Read(ctx, conn, &respEvt); err != nil {
 		t.Fatalf("failed to read event: %v", err)
 	}
@@ -318,7 +318,7 @@ func TestNTPWebSocket_SourceMismatchForbidden(t *testing.T) {
 		t.Fatalf("failed to write ntp query event: %v", err)
 	}
 
-	var respEvt event.Event
+	var respEvt event.RawEvent
 	if err := wsjson.Read(ctx, conn, &respEvt); err != nil {
 		t.Fatalf("failed to read event: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestNTPWebSocket_ForwarderError(t *testing.T) {
 		t.Fatalf("failed to write ntp query event: %v", err)
 	}
 
-	var respEvt event.Event
+	var respEvt event.RawEvent
 	if err := wsjson.Read(ctx, conn, &respEvt); err != nil {
 		t.Fatalf("failed to read event: %v", err)
 	}

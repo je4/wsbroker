@@ -186,12 +186,14 @@ func (ctrl *controller) dashboardPublishHandler(c *gin.Context) {
 		data = b
 	}
 
-	evt := &event.Event{
-		ID:     event.GenerateEventID(),
-		Type:   event.EventType(msgType),
-		Source: source,
-		Target: target,
-		Data:   data,
+	evt := &event.RawEvent{
+		BaseEvent: event.BaseEvent{
+			ID:     event.GenerateEventID(),
+			Type:   event.EventType(msgType),
+			Source: source,
+			Target: target,
+		},
+		Data: jsontext.Value(data),
 	}
 
 	if err := ctrl.broker.Send(evt); err != nil {

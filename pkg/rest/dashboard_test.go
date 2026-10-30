@@ -206,7 +206,7 @@ func TestDashboardConnectionManagementAndPublish(t *testing.T) {
 	}
 
 	// Verify Client A receives the broadcast
-	var receivedA event.Event
+	var receivedA event.RawEvent
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
 	if err := wsjson.Read(readCtx, connA, &receivedA); err != nil {
 		t.Errorf("clientA failed to receive published message: %v", err)

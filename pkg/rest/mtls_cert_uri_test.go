@@ -769,7 +769,7 @@ func TestWebSocket_ChannelInfoQuery_MTLSPermissions(t *testing.T) {
 			t.Fatalf("failed to send query: %v", err)
 		}
 
-		var respEvt event.Event
+		var respEvt event.RawEvent
 		if err := wsjson.Read(ctx, connA, &respEvt); err != nil {
 			t.Fatalf("failed to read response: %v", err)
 		}
@@ -795,7 +795,7 @@ func TestWebSocket_ChannelInfoQuery_MTLSPermissions(t *testing.T) {
 			t.Fatalf("failed to send query: %v", err)
 		}
 
-		var respEvt event.Event
+		var respEvt event.RawEvent
 		if err := wsjson.Read(ctx, connA, &respEvt); err != nil {
 			t.Fatalf("failed to read response: %v", err)
 		}
@@ -825,7 +825,7 @@ func TestWebSocket_ChannelInfoQuery_MTLSPermissions(t *testing.T) {
 			t.Fatalf("failed to send query: %v", err)
 		}
 
-		var respEvt event.Event
+		var respEvt event.RawEvent
 		if err := wsjson.Read(ctx, connC, &respEvt); err != nil {
 			t.Fatalf("failed to read response: %v", err)
 		}

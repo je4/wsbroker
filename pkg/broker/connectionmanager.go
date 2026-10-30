@@ -30,7 +30,7 @@ func NewConnectionManager(debug bool, logger zLogger.ZLogger) *ConnectionManager
 
 // job represents an asynchronous delivery unit targeting a specific client connection.
 type job struct {
-	evt  *event.Event
+	evt  *event.RawEvent
 	dest string
 }
 
@@ -106,7 +106,7 @@ func (manager *ConnectionManager) worker(id int, jobs <-chan *job) {
 // the event is fanned out to all subscribers; otherwise, it is directed to the named client.
 // Subscribers with write-only mode (ModeWO) are omitted to avoid unnecessary allocations and writes.
 // Ensures every dispatched event has a unique ID and assigns Channel when routing over a channel/group.
-func (manager *ConnectionManager) Send(evt *event.Event) error {
+func (manager *ConnectionManager) Send(evt *event.RawEvent) error {
 	if evt == nil {
 		return errors.New("event is nil")
 	}
@@ -157,7 +157,7 @@ func (manager *ConnectionManager) Send(evt *event.Event) error {
 }
 
 // sendWS sends the event directly to the named WebSocket connection with a 5-second timeout.
-func (manager *ConnectionManager) sendWS(dest string, evt *event.Event) error {
+func (manager *ConnectionManager) sendWS(dest string, evt *event.RawEvent) error {
 	conn, ok := manager.GetWSConn(dest)
 	if !ok {
 		return errors.Errorf("no connection for destination %s", dest)

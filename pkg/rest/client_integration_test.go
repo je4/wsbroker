@@ -242,8 +242,8 @@ func TestWSBrokerClient_Integration(t *testing.T) {
 	defer subBetaMain.Unsubscribe()
 
 	// Direct-Message Handler für Beta einrichten
-	betaDirectReceived := make(chan *wsbrokerclient.Event, 5)
-	unsubBetaDirect := cliBeta.OnDirect(func(evt *wsbrokerclient.Event) {
+	betaDirectReceived := make(chan *wsbrokerclient.RawEvent, 5)
+	unsubBetaDirect := cliBeta.OnDirect(func(evt *wsbrokerclient.RawEvent) {
 		betaDirectReceived <- evt
 	})
 	defer unsubBetaDirect()
@@ -476,15 +476,15 @@ func TestWSBrokerClient_CallbacksAndEventPublish(t *testing.T) {
 	}
 	defer cli.Close()
 
-	channelEvents := make(chan *wsbrokerclient.Event, 5)
-	allEvents := make(chan *wsbrokerclient.Event, 5)
+	channelEvents := make(chan *wsbrokerclient.RawEvent, 5)
+	allEvents := make(chan *wsbrokerclient.RawEvent, 5)
 
-	unsubChannel := cli.OnChannel("metrics", func(evt *wsbrokerclient.Event) {
+	unsubChannel := cli.OnChannel("metrics", func(evt *wsbrokerclient.RawEvent) {
 		channelEvents <- evt
 	})
 	defer unsubChannel()
 
-	unsubAll := cli.OnMessage(func(evt *wsbrokerclient.Event) {
+	unsubAll := cli.OnMessage(func(evt *wsbrokerclient.RawEvent) {
 		allEvents <- evt
 	})
 	defer unsubAll()
@@ -773,20 +773,20 @@ func TestWSBrokerClient_ConnectionModes(t *testing.T) {
 	defer subRW.Unsubscribe()
 
 	// Direct-Message Handler einrichten
-	roDirectReceived := make(chan *wsbrokerclient.Event, 5)
-	unsubRODirect := cliRO.OnDirect(func(evt *wsbrokerclient.Event) {
+	roDirectReceived := make(chan *wsbrokerclient.RawEvent, 5)
+	unsubRODirect := cliRO.OnDirect(func(evt *wsbrokerclient.RawEvent) {
 		roDirectReceived <- evt
 	})
 	defer unsubRODirect()
 
-	woDirectReceived := make(chan *wsbrokerclient.Event, 5)
-	unsubWODirect := cliWO.OnDirect(func(evt *wsbrokerclient.Event) {
+	woDirectReceived := make(chan *wsbrokerclient.RawEvent, 5)
+	unsubWODirect := cliWO.OnDirect(func(evt *wsbrokerclient.RawEvent) {
 		woDirectReceived <- evt
 	})
 	defer unsubWODirect()
 
-	rwDirectReceived := make(chan *wsbrokerclient.Event, 5)
-	unsubRWDirect := cliRW.OnDirect(func(evt *wsbrokerclient.Event) {
+	rwDirectReceived := make(chan *wsbrokerclient.RawEvent, 5)
+	unsubRWDirect := cliRW.OnDirect(func(evt *wsbrokerclient.RawEvent) {
 		rwDirectReceived <- evt
 	})
 	defer unsubRWDirect()

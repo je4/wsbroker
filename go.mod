@@ -9,13 +9,13 @@ require (
 	github.com/gin-contrib/cors v1.7.9
 	github.com/gin-gonic/gin v1.12.0
 	github.com/je4/utils/v2 v2.0.71
-	github.com/je4/wsbrokerclient v0.0.0-20261026171007-a62b6a4a8560
+	github.com/je4/wsbrokerclient v0.0.0-20261030110152-fd47785c6808
 	github.com/rs/zerolog v1.35.1
 	github.com/swaggo/swag/v2 v2.0.0-rc6
 	gitlab.switch.ch/ub-unibas/go-ublogger/v2 v2.0.1
 	go.ub.unibas.ch/cloud/certloader/v2 v2.0.26
 	go.ub.unibas.ch/cloud/swaggerui v0.0.0-20261002124323-79cb1c8a550a
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 )
 
 require (
@@ -23,7 +23,7 @@ require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/beevik/ntp v1.6.0 // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
-	github.com/bytedance/sonic v1.15.4 // indirect
+	github.com/bytedance/sonic v1.15.5 // indirect
 	github.com/bytedance/sonic/loader v0.5.3 // indirect
 	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.16 // indirect
@@ -42,7 +42,7 @@ require (
 	github.com/go-playground/locales v0.14.2 // indirect
 	github.com/go-playground/universal-translator v0.18.2 // indirect
 	github.com/go-playground/validator/v10 v10.30.5 // indirect
-	github.com/goccy/go-json v0.11.2 // indirect
+	github.com/goccy/go-json v0.12.0 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/certificate-transparency-go v1.4.0 // indirect
 	github.com/je4/trustutil/v2 v2.0.31 // indirect
@@ -57,13 +57,13 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.64.1 // indirect
-	github.com/smallstep/certinfo v1.17.0 // indirect
+	github.com/smallstep/certinfo v1.18.0 // indirect
 	github.com/sv-tools/openapi v0.4.0 // indirect
 	github.com/telkomdev/go-stash v1.0.6 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.2 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.9.2 // indirect
-	go.step.sm/crypto v0.91.0 // indirect
+	go.step.sm/crypto v0.91.1 // indirect
 	go.ub.unibas.ch/cloud/minivaultclient v1.0.7 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
