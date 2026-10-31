@@ -82,10 +82,7 @@ func NewNTPConnection(
 		}
 
 		// Receive response (standard NTP packet is at least 48 bytes)
-		bufSize := 48
-		if len(data) > bufSize {
-			bufSize = len(data)
-		}
+		bufSize := max(len(data), 48)
 		recvMsg := make([]byte, bufSize)
 		n, err := con.Read(recvMsg)
 		if err != nil {
