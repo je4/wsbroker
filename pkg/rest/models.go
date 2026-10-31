@@ -15,7 +15,6 @@ type PublishRequest struct {
 	Source  string         `json:"source" example:"publisher-1"`
 	Target  string         `json:"target,omitempty" example:"alerts"`
 	Type    string         `json:"type" example:"message"`
-	Token   string         `json:"token,omitempty"`
 	Data    jsontext.Value `json:"data,omitempty" swaggertype:"primitive,string" example:"{\"text\":\"hello world\"}"`
 	Message string         `json:"message,omitempty" example:"hello world"`
 }

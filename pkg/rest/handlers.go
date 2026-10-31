@@ -78,7 +78,6 @@ func (ctrl *controller) publish(c *gin.Context) {
 			Type:   event.EventType(req.Type),
 			Source: req.Source,
 			Target: req.Target,
-			Token:  req.Token,
 		},
 		Data: data,
 	}
@@ -156,7 +155,6 @@ func (ctrl *controller) publishChannel(c *gin.Context) {
 			Type:   event.EventType(req.Type),
 			Source: req.Source,
 			Target: req.Target,
-			Token:  req.Token,
 		},
 		Data: data,
 	}

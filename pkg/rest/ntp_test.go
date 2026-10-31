@@ -131,7 +131,7 @@ func TestNTPWebSocket_EndToEnd(t *testing.T) {
 	// Send NTP query
 	queryBytes := make([]byte, 48)
 	queryBytes[0] = 0x1b
-	queryEvt, err := event.NewNTPQueryEvent("client-ntp", queryBytes)
+	queryEvt, err := event.NewRawEvent(event.TypeNTPQuery, "client-ntp", "wsbroker", queryBytes)
 	if err != nil {
 		t.Fatalf("failed to create ntp query event: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestNTPWebSocket_ErrorWhenNotConfigured(t *testing.T) {
 	defer conn.Close(websocket.StatusNormalClosure, "done")
 
 	queryBytes := make([]byte, 48)
-	queryEvt, err := event.NewNTPQueryEvent("client-ntp-err", queryBytes)
+	queryEvt, err := event.NewRawEvent(event.TypeNTPQuery, "client-ntp-err", "wsbroker", queryBytes)
 	if err != nil {
 		t.Fatalf("failed to create ntp query event: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestNTPWebSocket_SourceMismatchForbidden(t *testing.T) {
 
 	// Impersonating another client name
 	queryBytes := make([]byte, 48)
-	queryEvt, err := event.NewNTPQueryEvent("impersonated-client", queryBytes)
+	queryEvt, err := event.NewRawEvent(event.TypeNTPQuery, "impersonated-client", "wsbroker", queryBytes)
 	if err != nil {
 		t.Fatalf("failed to create ntp query event: %v", err)
 	}
@@ -364,7 +364,7 @@ func TestNTPWebSocket_ForwarderError(t *testing.T) {
 	defer conn.Close(websocket.StatusNormalClosure, "done")
 
 	queryBytes := make([]byte, 48)
-	queryEvt, err := event.NewNTPQueryEvent("client-err-test", queryBytes)
+	queryEvt, err := event.NewRawEvent(event.TypeNTPQuery, "client-err-test", "wsbroker", queryBytes)
 	if err != nil {
 		t.Fatalf("failed to create ntp query event: %v", err)
 	}

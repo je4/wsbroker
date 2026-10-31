@@ -307,12 +307,16 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 		} else if evt.Source != name && name != "dashboard" {
 			if evt.Type == event.TypeNTPQuery {
 				ctrl.logger.Error().Msgf("ntp event for %s on %s not allowed", evt.GetSource(), name)
-				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name), evt.ID)
-				_ = ctrl.broker.Send(errEvt)
+				if errEvt, err := evt.CreateReply(event.TypeNTPError, fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name), "wsbroker"); err == nil {
+					errEvt.Target = name
+					_ = ctrl.broker.Send(errEvt)
+				}
 			} else if evt.Type == event.TypeChannelInfoQuery {
 				ctrl.logger.Error().Msgf("channel-info query for %s on %s not allowed", evt.GetSource(), name)
-				errEvt, _ := event.NewChannelInfoErrorEvent(name, fmt.Sprintf("channel-info query for %s on %s not allowed", evt.GetSource(), name), "wsbroker", evt.ID)
-				_ = ctrl.broker.Send(errEvt)
+				if errEvt, err := evt.CreateReply(event.TypeChannelInfoError, fmt.Sprintf("channel-info query for %s on %s not allowed", evt.GetSource(), name), "wsbroker"); err == nil {
+					errEvt.Target = name
+					_ = ctrl.broker.Send(errEvt)
+				}
 			} else {
 				ctrl.logger.Warn().Msgf("client %s attempted to send event with invalid source %s, dropping", name, evt.Source)
 			}
@@ -367,43 +371,48 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 			ctrl.logger.Debug().Msgf("Received NTP query from %s: %s", evt.GetSource(), evt.Data)
 			if name != evt.GetSource() && name != "dashboard" {
 				ctrl.logger.Error().Msgf("ntp event for %s on %s not allowed", evt.GetSource(), name)
-				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name), evt.ID)
-				_ = ctrl.broker.Send(errEvt)
+				if errEvt, err := evt.CreateReply(event.TypeNTPError, fmt.Sprintf("ntp event for %s on %s not allowed", evt.GetSource(), name), "wsbroker"); err == nil {
+					errEvt.Target = name
+					_ = ctrl.broker.Send(errEvt)
+				}
 				continue
 			}
 			if ctrl.ntpFunc == nil {
 				ctrl.logger.Error().Msg("NTP server not configured")
-				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, "ntp service not configured", evt.ID)
-				_ = ctrl.broker.Send(errEvt)
+				if errEvt, err := evt.CreateReply(event.TypeNTPError, "ntp service not configured", "wsbroker"); err == nil {
+					_ = ctrl.broker.Send(errEvt)
+				}
 				continue
 			}
 			data, err := evt.GetData()
 			if err != nil {
 				ctrl.logger.Error().Err(err).Msg("Failed to get raw ntp data")
-				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, err.Error(), evt.ID)
-				_ = ctrl.broker.Send(errEvt)
+				if errEvt, err := evt.CreateReply(event.TypeNTPError, err.Error(), "wsbroker"); err == nil {
+					_ = ctrl.broker.Send(errEvt)
+				}
 				continue
 			}
 			raw, ok := data.([]byte)
 			if !ok {
 				ctrl.logger.Error().Msg("NTP query data is not raw bytes")
-				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, "ntp query data must be raw bytes", evt.ID)
-				_ = ctrl.broker.Send(errEvt)
+				if errEvt, err := evt.CreateReply(event.TypeNTPError, "ntp query data must be raw bytes", "wsbroker"); err == nil {
+					_ = ctrl.broker.Send(errEvt)
+				}
 				continue
 			}
 			result, err := ctrl.ntpFunc(raw)
 			if err != nil {
 				ctrl.logger.Error().Err(err).Msg("Failed to query ntp server")
-				errEvt, _ := event.NewNTPErrorEvent("wsbroker", name, err.Error(), evt.ID)
-				_ = ctrl.broker.Send(errEvt)
+				if errEvt, err := evt.CreateReply(event.TypeNTPError, err.Error(), "wsbroker"); err == nil {
+					_ = ctrl.broker.Send(errEvt)
+				}
 				continue
 			}
-			respEvt, err := event.NewNTPResponseEvent("wsbroker", name, result, evt.ID)
+			respEvt, err := evt.CreateReply(event.TypeNTPResponse, result, "wsbroker")
 			if err != nil {
 				ctrl.logger.Error().Err(err).Msg("Failed to create ntp response event")
 				continue
 			}
-			ctrl.logger.Debug().Msgf("Sending ntp response to %s: %d bytes", evt.GetSource(), len(result))
 			if err := ctrl.broker.Send(respEvt); err != nil {
 				ctrl.logger.Error().Err(err).Msg("Failed to send NTP response")
 			}
@@ -420,15 +429,17 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 			}
 			if ch == "" {
 				ctrl.logger.Warn().Msgf("client %s sent channel-info query without channel name", name)
-				errEvt, _ := event.NewChannelInfoErrorEvent(name, "channel name required", "wsbroker", evt.ID)
-				_ = ctrl.broker.Send(errEvt)
+				if errEvt, err := evt.CreateReply(event.TypeChannelInfoError, "channel name required", "wsbroker"); err == nil {
+					_ = ctrl.broker.Send(errEvt)
+				}
 				continue
 			}
 
 			if certPerms != nil && certPerms.HasRestrictions() && !certPerms.CanAccessChannel(ch, mode) {
 				ctrl.logger.Warn().Msgf("client %s certificate denied channel-info query for channel %s with mode %s", name, ch, mode)
-				errEvt, _ := event.NewChannelInfoErrorEvent(name, fmt.Sprintf("not authorized to access channel '%s'", ch), "wsbroker", evt.ID)
-				_ = ctrl.broker.Send(errEvt)
+				if errEvt, err := evt.CreateReply(event.TypeChannelInfoError, fmt.Sprintf("not authorized to access channel '%s'", ch), "wsbroker"); err == nil {
+					_ = ctrl.broker.Send(errEvt)
+				}
 				continue
 			}
 
@@ -441,11 +452,12 @@ func (ctrl *controller) handleWSConnection(c *gin.Context, conn *websocket.Conn,
 				Subscribers: len(members),
 				Clients:     members,
 			}
-			respEvt, err := event.NewChannelInfoResponseEvent(name, info, "wsbroker", evt.ID)
+			respEvt, err := evt.CreateReply(event.TypeChannelInfoResponse, info, "wsbroker")
 			if err != nil {
 				ctrl.logger.Error().Err(err).Msgf("failed to marshal channel-info response for %s", ch)
-				errEvt, _ := event.NewChannelInfoErrorEvent(name, err.Error(), "wsbroker", evt.ID)
-				_ = ctrl.broker.Send(errEvt)
+				if errEvt, err := evt.CreateReply(event.TypeChannelInfoError, err.Error(), "wsbroker"); err == nil {
+					_ = ctrl.broker.Send(errEvt)
+				}
 				continue
 			}
 			ctrl.logger.Debug().Msgf("Sending channel-info response for %s to %s (%d members)", ch, name, len(members))
