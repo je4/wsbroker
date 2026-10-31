@@ -673,7 +673,7 @@ func TestWebSocket_LargePayload(t *testing.T) {
 	}
 
 	fileMsg := event.NewFileMessage("display_screenshot.jpg", "image/jpeg", largeData)
-	fileEvt, err := event.NewFileEvent("sender", "screenshots", fileMsg)
+	fileEvt, err := event.NewRawEvent(event.TypeFile, "sender", "screenshots", fileMsg)
 	if err != nil {
 		t.Fatalf("failed to create file event: %v", err)
 	}
@@ -750,7 +750,7 @@ func TestWebSocket_CustomReadLimitExceeded(t *testing.T) {
 		data20k[i] = byte(i % 256)
 	}
 	msg20k := event.NewFileMessage("small.bin", "application/octet-stream", data20k)
-	evt20k, err := event.NewFileEvent("sender", "testchan", msg20k)
+	evt20k, err := event.NewRawEvent(event.TypeFile, "sender", "testchan", msg20k)
 	if err != nil {
 		t.Fatalf("failed to create file event: %v", err)
 	}
@@ -769,7 +769,7 @@ func TestWebSocket_CustomReadLimitExceeded(t *testing.T) {
 		data150k[i] = byte(i % 256)
 	}
 	msg150k := event.NewFileMessage("large.bin", "application/octet-stream", data150k)
-	evt150k, err := event.NewFileEvent("sender", "testchan", msg150k)
+	evt150k, err := event.NewRawEvent(event.TypeFile, "sender", "testchan", msg150k)
 	if err != nil {
 		t.Fatalf("failed to create file event: %v", err)
 	}
@@ -836,7 +836,7 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 
 	// Scenario 1: Client A queries room1 info (target in target field)
 	{
-		queryEvt, err := event.NewChannelInfoQueryEvent("clientA", "room1")
+		queryEvt, err := event.NewRawEvent(event.TypeChannelInfoQuery, "clientA", "room1", "room1")
 		if err != nil {
 			t.Fatalf("failed to create query event: %v", err)
 		}
@@ -922,7 +922,7 @@ func TestWebSocket_ChannelInfoQuery(t *testing.T) {
 
 	// Scenario 3: Non-existent / empty channel query
 	{
-		queryEvt, err := event.NewChannelInfoQueryEvent("clientA", "non-existent-channel")
+		queryEvt, err := event.NewRawEvent(event.TypeChannelInfoQuery, "clientA", "non-existent-channel", "non-existent-channel")
 		if err != nil {
 			t.Fatalf("failed to create query event: %v", err)
 		}

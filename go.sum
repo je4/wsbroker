@@ -67,8 +67,6 @@ github.com/go-playground/universal-translator v0.18.2 h1:LCsMLC9RzmbUMNUPVYD15dm
 github.com/go-playground/universal-translator v0.18.2/go.mod h1:67VZIMp5lQpDWlnStOct22q1bkdJGJqHghbOtmkawxk=
 github.com/go-playground/validator/v10 v10.30.5 h1:YyCXvVShZbs2Sm3Mb53eNOlhRXctSOzW5QJAouCTZL4=
 github.com/go-playground/validator/v10 v10.30.5/go.mod h1:wEqiaov48pXX1kjhc3Da8y0M0Dtg/BK7gurFBLgwFrQ=
-github.com/goccy/go-json v0.11.2 h1:jdZv93Tt4ioR8yW1CoNsvSxrcZlCXAUU1aZXN7gpXUA=
-github.com/goccy/go-json v0.11.2/go.mod h1:3NdmfEkZlB7YI5UFw/qdFKq8XN1aiWR0YyRPWZNQltY=
 github.com/goccy/go-json v0.12.0 h1:pD+oWouAiz4yruwXIt/iT+lOMeyhr1aTtxzaMP/RgVI=
 github.com/goccy/go-json v0.12.0/go.mod h1:3NdmfEkZlB7YI5UFw/qdFKq8XN1aiWR0YyRPWZNQltY=
 github.com/goccy/go-yaml v1.19.2 h1:PmFC1S6h8ljIz6gMRBopkjP1TVT7xuwrButHID66PoM=
@@ -82,10 +80,8 @@ github.com/je4/trustutil/v2 v2.0.31 h1:QUMfnE8LoyNlBLvhaMdSZFiq/UlOoHyPjJd+C6qT5
 github.com/je4/trustutil/v2 v2.0.31/go.mod h1:76JX2f0YrNvxiI9kVufLdlc4qTVGXpk64BiThBxzWGs=
 github.com/je4/utils/v2 v2.0.71 h1:PEzwBdpdSiJej+sb8PKpG/3CRYyuxvn3RX7ajzB/EX0=
 github.com/je4/utils/v2 v2.0.71/go.mod h1:GUTGKzLcu4u3lopSPjpxs3TK/fQGtHTGEEdbNb2WCxU=
-github.com/je4/wsbrokerclient v0.0.0-20261027102933-2f6232b7c274 h1:WQDRfwOHgTIwoEtEZLKQJRCVk1Tpo6j3KsEtuLQEP3s=
-github.com/je4/wsbrokerclient v0.0.0-20261027102933-2f6232b7c274/go.mod h1:bMEWSUrtTdQaXW/B9HJ3xMGiH3OMN4hUbIppMpi4oJA=
-github.com/je4/wsbrokerclient v0.0.0-20261030110152-fd47785c6808 h1:87Is/x5g8vTt+myqKiVG0szjpnPkRvuGAC4mlnj/a5g=
-github.com/je4/wsbrokerclient v0.0.0-20261030110152-fd47785c6808/go.mod h1:bMEWSUrtTdQaXW/B9HJ3xMGiH3OMN4hUbIppMpi4oJA=
+github.com/je4/wsbrokerclient v0.0.0-20261031123105-19625f194e8a h1:FpmtGt/O3LPVozqeyRGYwnS6KpsJRiJ1srJQeRshbWU=
+github.com/je4/wsbrokerclient v0.0.0-20261031123105-19625f194e8a/go.mod h1:bMEWSUrtTdQaXW/B9HJ3xMGiH3OMN4hUbIppMpi4oJA=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/klauspost/cpuid/v2 v2.4.1 h1:I9KxadAkvo+QjtcEE2f2tyfEvmIla/T0m+14PrZNl0U=
@@ -106,7 +102,6 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJ
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee h1:W5t00kpgFdJifH4BDsTlE89Zl93FEloxaWZfGcifgq8=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
-github.com/pelletier/go-toml v1.9.5 h1:4yBQzkHv+7BHq2PQUZF3Mx0IYxG7LsP222s7Agd3ve8=
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
@@ -122,8 +117,6 @@ github.com/rogpeppe/go-internal v1.16.0 h1:O9DK+vNMDVGLr2BeZqmpLeMjiMNkuXfcqntWb
 github.com/rogpeppe/go-internal v1.16.0/go.mod h1:DrUVZyrJU+txYW5/1kwtXQSMFio52ZOxX7yM1VHvnxs=
 github.com/rs/zerolog v1.35.1 h1:m7xQeoiLIiV0BCEY4Hs+j2NG4Gp2o2KPKmhnnLiazKI=
 github.com/rs/zerolog v1.35.1/go.mod h1:EjML9kdfa/RMA7h/6z6pYmq1ykOuA8/mjWaEvGI+jcw=
-github.com/smallstep/certinfo v1.17.0 h1:H2WNord6ypAKKgcWv9PBzdgZEX8bzIWvoWvE1RTpmvE=
-github.com/smallstep/certinfo v1.17.0/go.mod h1:OPwtFVAOx29OjOYsVtj9cDliDFywkVYPt+ExDg43kPs=
 github.com/smallstep/certinfo v1.18.0 h1:q9T0DSkHSmD3gobEqy+3J6HbHpQIOUPEL1IOSvelRIQ=
 github.com/smallstep/certinfo v1.18.0/go.mod h1:OPwtFVAOx29OjOYsVtj9cDliDFywkVYPt+ExDg43kPs=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
@@ -153,8 +146,6 @@ gitlab.switch.ch/ub-unibas/go-ublogger/v2 v2.0.1 h1:B/XpfKBC3IwbecBIxX9G6ZZ8Ggts
 gitlab.switch.ch/ub-unibas/go-ublogger/v2 v2.0.1/go.mod h1:A9W/cBMpdDDiuGCeNiTS9JRlCLRxApXEhi1q/j/mAws=
 go.mongodb.org/mongo-driver/v2 v2.9.2 h1:OCAdjI37pC/SVxucz/9CM8zD4jCdegtsY5QcKzYFCgE=
 go.mongodb.org/mongo-driver/v2 v2.9.2/go.mod h1:SHKN0IWkKmEVGHLjXnni6s4wPKX4v86FTgOeJJFuXcA=
-go.step.sm/crypto v0.91.0 h1:0mN0DwVOvUuh7VbyTnxABZuAkxwak/Grp8Y/b4YaZDU=
-go.step.sm/crypto v0.91.0/go.mod h1:NxxObRBymdbyXLoTCW5Ea6sLxuy5yI/xr9+hSBlbU/Q=
 go.step.sm/crypto v0.91.1 h1:ZMMdj/A2rQ+Zr8hyCo4BHJd++c5T8VQIXJ8Sljg57p0=
 go.step.sm/crypto v0.91.1/go.mod h1:Sin2AcA+BgYfx1Ulku2Rt0NwS1ky22joBoETFTG1fD4=
 go.ub.unibas.ch/cloud/certloader/v2 v2.0.26 h1:uoFAFWvKCePE6QxRNBmPopy1IHzWvkGbJb1zj2kgNec=
@@ -179,8 +170,6 @@ golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e h1:HgI6W1OolKK6tcV74is+rl9SM
 golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e/go.mod h1:DBoxwWhjaW8DJJw/YeM4zpeOKMC1FMXSblsYy+1mFSw=
 golang.org/x/mod v0.42.0 h1:ICeL3t2L30ljSPHHxDnR4fqVcBt/zR2zJAb9juavmQg=
 golang.org/x/mod v0.42.0/go.mod h1:u5fzIrRInkL8MaO1cbRkUHT64v303YIT5KEqpNr7jRs=
-golang.org/x/net v0.61.0 h1:RR+6j/BTBCrggOLugxa+66R8FvoN6MHlzDlZIbN9YFw=
-golang.org/x/net v0.61.0/go.mod h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI=
 golang.org/x/net v0.62.0 h1:18ELalfM5+XNRwzM2nYqXsZQ9ByS1uhj2O/U7+5jqRY=
 golang.org/x/net v0.62.0/go.mod h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI=
 golang.org/x/sync v0.24.0 h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=

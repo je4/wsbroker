@@ -761,7 +761,7 @@ func TestWebSocket_ChannelInfoQuery_MTLSPermissions(t *testing.T) {
 
 	// 1. Client A queries roomA (Authorized)
 	{
-		queryEvt, err := event.NewChannelInfoQueryEvent("clientA", "roomA")
+		queryEvt, err := event.NewRawEvent(event.TypeChannelInfoQuery, "clientA", "roomA", "roomA")
 		if err != nil {
 			t.Fatalf("failed to create query: %v", err)
 		}
@@ -787,7 +787,7 @@ func TestWebSocket_ChannelInfoQuery_MTLSPermissions(t *testing.T) {
 
 	// 2. Client A queries roomB (Unauthorized / Forbidden)
 	{
-		queryEvt, err := event.NewChannelInfoQueryEvent("clientA", "roomB")
+		queryEvt, err := event.NewRawEvent(event.TypeChannelInfoQuery, "clientA", "roomB", "roomB")
 		if err != nil {
 			t.Fatalf("failed to create query: %v", err)
 		}
@@ -817,7 +817,7 @@ func TestWebSocket_ChannelInfoQuery_MTLSPermissions(t *testing.T) {
 
 	// 3. Client C with wildcard certificate queries roomB (Authorized via wildcard)
 	{
-		queryEvt, err := event.NewChannelInfoQueryEvent("clientC", "roomB")
+		queryEvt, err := event.NewRawEvent(event.TypeChannelInfoQuery, "clientC", "roomB", "roomB")
 		if err != nil {
 			t.Fatalf("failed to create query: %v", err)
 		}
