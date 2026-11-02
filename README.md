@@ -1,3 +1,5 @@
+This Repository has been moved to https://gitlab.switch.ch/ub-unibas/library-infrastructure/wsbroker
+
 # WSBroker
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/je4/wsbroker.svg)](https://pkg.go.dev/github.com/je4/wsbroker)
